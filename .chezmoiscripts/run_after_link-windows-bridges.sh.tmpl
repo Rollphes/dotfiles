@@ -1,0 +1,248 @@
+#!/bin/sh
+set -eu
+
+{{ if eq .chezmoi.os "windows" -}}
+
+{{ includeTemplate "lib/console.sh.tmpl" . }}
+{{ includeTemplate "lib/msys2-env.sh.tmpl" . }}
+
+# Prevent MSYS2 argument conversion from rewriting Windows CLI arguments
+# such as mklink's /D and reg.exe's /v.
+export MSYS_NO_PATHCONV=1
+
+component="windows-bridges"
+
+ok_count=0
+created_count=0
+warn_count=0
+
+fail() {
+    console_status "ERROR" "-" "-" "$*" >&2
+    console_failed "$component"
+    exit 1
+}
+
+fail_topology_conflict() {
+    name="$1"
+    kind="$2"
+    dst="$3"
+    src="$4"
+    actual_type="$5"
+
+    console_status \
+        "ERROR" \
+        "$name" \
+        "$kind" \
+        "topology conflict" >&2
+
+    printf '\n' >&2
+    console_detail "actual" "Windows $actual_type: $dst" >&2
+    console_detail "expected" "Windows symlink: $dst" >&2
+    console_detail "target" "MSYS2 canonical target: $src" >&2
+
+    console_failed "$component"
+    exit 1
+}
+
+fail_wrong_target() {
+    name="$1"
+    kind="$2"
+    dst="$3"
+    actual="$4"
+    expected="$5"
+
+    console_status \
+        "ERROR" \
+        "$name" \
+        "$kind" \
+        "wrong symlink target" >&2
+
+    printf '\n' >&2
+    console_detail "link" "$dst" >&2
+    console_detail "actual" "$actual" >&2
+    console_detail "expected" "$expected" >&2
+
+    console_failed "$component"
+    exit 1
+}
+
+fail_broken_link() {
+    name="$1"
+    kind="$2"
+    dst="$3"
+    src="$4"
+
+    console_status \
+        "ERROR" \
+        "$name" \
+        "$kind" \
+        "broken symlink" >&2
+
+    printf '\n' >&2
+    console_detail "link" "$dst" >&2
+    console_detail "expected" "$src" >&2
+
+    console_failed "$component"
+    exit 1
+}
+
+fail_developer_mode() {
+    name="$1"
+    kind="$2"
+
+    console_status \
+        "ERROR" \
+        "$name" \
+        "$kind" \
+        "cannot create symlink" >&2
+
+    printf '\n' >&2
+    console_detail \
+        "reason" \
+        "Windows Developer Mode is required for cross-home symlinks" >&2
+
+    console_failed "$component"
+    exit 1
+}
+
+resolve_path() {
+    realpath "$1" 2>/dev/null || return 1
+}
+
+require_developer_mode() {
+    name="$1"
+    kind="$2"
+
+    developer_mode=$(
+        reg.exe query \
+            'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock' \
+            /v AllowDevelopmentWithoutDevLicense 2>/dev/null \
+        | grep -Eo '0x[0-9a-fA-F]+' \
+        | tail -n 1
+    )
+
+    if [ "$developer_mode" != "0x1" ]; then
+        fail_developer_mode "$name" "$kind"
+    fi
+}
+
+# Keep filesystem operations in the MSYS2 POSIX namespace.
+msys_home=$(cygpath -u "{{ .chezmoi.homeDir }}")
+
+[ -n "${USERPROFILE:-}" ] ||
+    fail "USERPROFILE is not set"
+
+win_home=$(cygpath -u "$USERPROFILE")
+
+reconcile_one() {
+    kind="$1"
+    name="$2"
+
+    case "$kind" in
+        dir|file)
+            ;;
+        *)
+            fail "unknown bridge kind '$kind' for '$name'"
+            ;;
+    esac
+
+    src="$msys_home/$name"
+    dst="$win_home/$name"
+
+    # Existing Windows-side symlink:
+    # verify that it resolves to the canonical MSYS2-side target.
+    if [ -L "$dst" ]; then
+        actual=$(resolve_path "$dst") ||
+            fail_broken_link "$name" "$kind" "$dst" "$src"
+
+        expected=$(resolve_path "$src") ||
+            fail_broken_link "$name" "$kind" "$dst" "$src"
+
+        if [ "$actual" != "$expected" ]; then
+            fail_wrong_target "$name" "$kind" "$dst" "$actual" "$expected"
+        fi
+
+        console_status \
+            "OK" \
+            "$name" \
+            "$kind" \
+            "link: $dst -> target: $src"
+
+        ok_count=$((ok_count + 1))
+        return 0
+    fi
+
+    # A real Windows-side resource violates the topology.
+    # Never overwrite or migrate it automatically.
+    if [ -e "$dst" ]; then
+        if [ -d "$dst" ]; then
+            actual_type="real directory"
+        elif [ -f "$dst" ]; then
+            actual_type="real file"
+        else
+            actual_type="real filesystem entry"
+        fi
+
+        fail_topology_conflict \
+            "$name" \
+            "$kind" \
+            "$dst" \
+            "$src" \
+            "$actual_type"
+    fi
+
+    # Directory bridges establish their canonical MSYS2-side target eagerly.
+    if [ "$kind" = "dir" ] && [ ! -e "$src" ]; then
+        mkdir -p "$src"
+    fi
+
+    # File bridges wait until their canonical MSYS2-side file exists.
+    if [ ! -e "$src" ]; then
+        console_status \
+            "WARN" \
+            "$name" \
+            "$kind" \
+            "canonical target missing: $src" >&2
+
+        warn_count=$((warn_count + 1))
+        return 0
+    fi
+
+    require_developer_mode "$name" "$kind"
+
+    # The Windows-side parent may remain host-local while only this child
+    # resource is bridged.
+    mkdir -p "$(dirname "$dst")"
+
+    dst_win=$(cygpath -w "$dst")
+    src_win=$(cygpath -w "$src")
+
+    if [ "$kind" = "dir" ]; then
+        cmd.exe /c mklink /D "$dst_win" "$src_win" >/dev/null ||
+            fail "failed to create directory bridge for '$name'"
+    else
+        cmd.exe /c mklink "$dst_win" "$src_win" >/dev/null ||
+            fail "failed to create file bridge for '$name'"
+    fi
+
+    console_status \
+        "CREATED" \
+        "$name" \
+        "$kind" \
+        "link: $dst -> target: $src"
+
+    created_count=$((created_count + 1))
+}
+
+console_header "$component" "Reconciling cross-home bridges"
+console_context "topology: Windows symlink -> MSYS2 canonical target"
+
+{{ range .windows.bridges -}}
+reconcile_one "{{ .kind }}" "{{ .path }}"
+{{ end -}}
+
+console_complete \
+    "$component" \
+    "$ok_count ok, $created_count created, $warn_count warning(s)"
+
+{{ end -}}

@@ -1,0 +1,31 @@
+#!/bin/sh
+# Hash: {{ include "dot_config/mise/config.toml" | sha256sum }}
+
+set -eu
+
+{{ includeTemplate "lib/msys2-env.sh.tmpl" . }}
+{{ includeTemplate "lib/console.sh.tmpl" . }}
+
+component="mise"
+
+console_header "$component" "Install managed tools"
+console_context "$HOME/.config/mise/config.toml"
+
+export PATH="$HOME/.local/bin:$PATH"
+
+if ! command -v mise >/dev/null 2>&1; then
+    console_status "ERROR" "mise" "tool" "not found"
+    console_failed "$component"
+    exit 1
+fi
+
+console_status "OK" "mise" "tool" "available"
+
+if ! mise install --yes; then
+    console_status "ERROR" "toolset" "sync" "mise install failed"
+    console_failed "$component"
+    exit 1
+fi
+
+console_status "OK" "toolset" "sync" "managed tools installed"
+console_complete "$component" "managed tools installed"

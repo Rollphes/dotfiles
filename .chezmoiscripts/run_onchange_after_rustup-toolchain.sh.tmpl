@@ -1,0 +1,48 @@
+#!/bin/sh
+# Policy: stable / minimal / clippy / rustfmt
+
+set -eu
+
+{{ includeTemplate "lib/msys2-env.sh.tmpl" . }}
+{{ includeTemplate "lib/rustup-env.sh.tmpl" . }}
+{{ includeTemplate "lib/console.sh.tmpl" . }}
+
+component="rust"
+
+console_header "$component" "Configure Rust toolchain"
+console_context "$RUSTUP_HOME"
+
+if ! command -v rustup >/dev/null 2>&1; then
+    console_status "ERROR" "rustup" "tool" "not found"
+    console_failed "$component"
+    exit 1
+fi
+
+console_status "OK" "rustup" "tool" "available"
+
+if ! rustup set profile minimal; then
+    console_status "ERROR" "minimal" "profile" "failed to configure"
+    console_failed "$component"
+    exit 1
+fi
+
+console_status "OK" "minimal" "profile" "configured"
+
+if ! rustup default stable; then
+    console_status "ERROR" "stable" "toolchain" "installation failed"
+    console_failed "$component"
+    exit 1
+fi
+
+console_status "OK" "stable" "toolchain" "default"
+
+if ! rustup component add clippy rustfmt; then
+    console_status "ERROR" "components" "sync" "installation failed"
+    console_failed "$component"
+    exit 1
+fi
+
+console_status "OK" "clippy" "component" "installed"
+console_status "OK" "rustfmt" "component" "installed"
+
+console_complete "$component" "Rust toolchain configured"

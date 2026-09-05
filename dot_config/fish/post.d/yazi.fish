@@ -1,0 +1,1 @@
+set -gx YAZI_CONFIG_HOME (cygpath -w "$XDG_CONFIG_HOME/yazi")

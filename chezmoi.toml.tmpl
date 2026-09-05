@@ -1,0 +1,6 @@
+{{- if eq .chezmoi.os "windows" }}
+destDir = "C:/msys64/home/{{ env "USERNAME" }}"
+
+[interpreters.sh]
+command = "C:/msys64/usr/bin/sh.exe"
+{{- end }}

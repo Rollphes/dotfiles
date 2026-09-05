@@ -1,0 +1,40 @@
+[tools]
+node = "latest"
+
+"aqua:starship/starship" = "latest"
+"aqua:carapace-sh/carapace-bin" = "latest"
+
+fd = "latest"
+ripgrep = "latest"
+ast-grep = "latest"
+fzf = "latest"
+zoxide = "latest"
+"aqua:lsd-rs/lsd" = "latest"
+"aqua:sxyazi/yazi" = "latest"
+"aqua:atuinsh/atuin" = "latest"
+
+"aqua:babarot/gomi" = "latest"
+"aqua:bootandy/dust" = "latest"
+"aqua:boyter/scc" = "latest"
+"github:aristocratos/btop4win" = "latest"
+
+"aqua:cli/cli" = "latest"
+"aqua:nektos/act" = "latest"
+hunk = "latest"
+
+"github:herdrdev/herdr" = "latest"
+"npm:@anthropic-ai/claude-code" = { version = "latest", allow_builds = ["@anthropic-ai/claude-code"] }
+"npm:@openai/codex" = "latest"
+"npm:backlog.md" = "latest"
+"pipx:graphifyy" = "latest"
+
+"npm:pnpm" = "latest"
+jq = "latest"
+python = "latest"
+uv = "latest"
+"npm:typescript" = "latest"
+"npm:typescript-language-server" = "latest"
+"npm:wrangler" = "latest"
+"aqua:supabase/cli" = "latest"
+
+"cargo:keifu" = "latest"

@@ -1,0 +1,57 @@
+#!/bin/sh
+
+set -eu
+
+{{ includeTemplate "lib/msys2-env.sh.tmpl" . }}
+{{ includeTemplate "lib/rustup-env.sh.tmpl" . }}
+{{ includeTemplate "lib/console.sh.tmpl" . }}
+
+component="rustup"
+
+console_header "$component" "Bootstrap Rust toolchain manager"
+console_context "$RUSTUP_HOME"
+
+if command -v rustup >/dev/null 2>&1; then
+    console_status "OK" "rustup" "tool" "already installed"
+    console_complete "$component" "bootstrap already satisfied"
+    exit 0
+fi
+
+tmp_dir="$(mktemp -d)"
+trap 'rm -rf "$tmp_dir"' EXIT INT TERM
+
+installer="$tmp_dir/rustup-init.exe"
+
+console_status "RUN" "rustup-init" "download" "downloading installer"
+
+if ! curl \
+    --proto '=https' \
+    --tlsv1.2 \
+    --fail \
+    --silent \
+    --show-error \
+    --location \
+    --output "$installer" \
+    "https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe"
+then
+    console_status "ERROR" "rustup-init" "download" "download failed"
+    console_failed "$component"
+    exit 1
+fi
+
+console_status "RUN" "rustup" "install" "installing manager"
+
+if ! "$installer" \
+    -y \
+    --no-modify-path \
+    --default-host x86_64-pc-windows-msvc \
+    --default-toolchain none \
+    --profile minimal
+then
+    console_status "ERROR" "rustup" "install" "installation failed"
+    console_failed "$component"
+    exit 1
+fi
+
+console_status "OK" "rustup" "tool" "installed"
+console_complete "$component" "toolchain manager installed"

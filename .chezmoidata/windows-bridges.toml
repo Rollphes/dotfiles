@@ -1,0 +1,27 @@
+[[windows.bridges]]
+path = ".config/wezterm"
+kind = "dir"
+
+[[windows.bridges]]
+path = ".agents"
+kind = "dir"
+
+[[windows.bridges]]
+path = ".claude"
+kind = "dir"
+
+[[windows.bridges]]
+path = ".codex"
+kind = "dir"
+
+[[windows.bridges]]
+path = ".claude.json"
+kind = "file"
+
+[[windows.bridges]]
+path = ".gitconfig"
+kind = "file"
+
+[[windows.bridges]]
+path = ".npmrc"
+kind = "file"

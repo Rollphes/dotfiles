@@ -1,0 +1,4 @@
+core:
+  trash:
+    strategy: auto
+    gomi_dir: C:/msys64/home/Rollphes/.local/share/gomi
