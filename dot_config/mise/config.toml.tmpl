@@ -18,6 +18,8 @@ zoxide = "latest"
 "aqua:boyter/scc" = "latest"
 {{ if eq .chezmoi.os "windows" -}}
 "github:aristocratos/btop4win" = "latest"
+{{ else -}}
+"aqua:aristocratos/btop" = "latest"
 {{ end -}}
 
 "aqua:cli/cli" = "latest"
