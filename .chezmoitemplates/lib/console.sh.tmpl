@@ -1,18 +1,15 @@
-# Prints a component header.
 # @param $1 Component name.
 # @param $2 Header title.
 console_header() {
     printf '[%s] %s\n' "$1" "$2"
 }
 
-# Prints contextual information followed by a blank line.
 # @param $1 Context text.
 console_context() {
     printf '  %s\n' "$1"
     printf '\n'
 }
 
-# Prints a formatted resource status.
 # @param $1 Status label.
 # @param $2 Resource name.
 # @param $3 Resource kind.
@@ -22,21 +19,18 @@ console_status() {
         "$1" "$2" "$3" "$4"
 }
 
-# Prints a labeled detail value.
 # @param $1 Detail label.
 # @param $2 Detail value.
 console_detail() {
     printf '           %-9s %s\n' "${1}:" "$2"
 }
 
-# Prints a component completion summary.
 # @param $1 Component name.
 # @param $2 Completion summary.
 console_complete() {
     printf '\n[%s] Complete: %s\n' "$1" "$2"
 }
 
-# Prints a component failure message to standard error.
 # @param $1 Component name.
 console_failed() {
     printf '\n[%s] Failed\n' "$1" >&2
