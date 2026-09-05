@@ -1,8 +1,5 @@
 console_header() {
-    component="$1"
-    title="$2"
-
-    printf '[%s] %s\n' "$component" "$title"
+    printf '[%s] %s\n' "$1" "$2"
 }
 
 console_context() {
@@ -11,31 +8,18 @@ console_context() {
 }
 
 console_status() {
-    status="$1"
-    resource="$2"
-    kind="$3"
-    detail="$4"
-
     printf '  %-7s %-20s [%-4s] %s\n' \
-        "$status" "$resource" "$kind" "$detail"
+        "$1" "$2" "$3" "$4"
 }
 
 console_detail() {
-    label="$1"
-    value="$2"
-
-    printf '           %-9s %s\n' "$label:" "$value"
+    printf '           %-9s %s\n' "${1}:" "$2"
 }
 
 console_complete() {
-    component="$1"
-    summary="$2"
-
-    printf '\n[%s] Complete: %s\n' "$component" "$summary"
+    printf '\n[%s] Complete: %s\n' "$1" "$2"
 }
 
 console_failed() {
-    component="$1"
-
-    printf '\n[%s] Failed\n' "$component" >&2
+    printf '\n[%s] Failed\n' "$1" >&2
 }
