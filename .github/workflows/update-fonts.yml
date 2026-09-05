@@ -1,0 +1,89 @@
+name: Update fonts
+
+on:
+  schedule:
+    - cron: '17 9 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: update-fonts
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve managed font releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash .github/scripts/update-fonts.sh
+
+      - name: Create or update pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          if git diff --quiet -- .chezmoidata/fonts.json; then
+            echo 'Font lock is current'
+            exit 0
+          fi
+
+          branch='automation/update-fonts'
+          marker='<!-- dotfiles-font-updater -->'
+          remote_sha="$(git ls-remote --heads origin "refs/heads/$branch" | cut -f1)"
+          if [ -n "$remote_sha" ]; then
+            previous_body="$(
+              gh pr list \
+                --head "$branch" \
+                --state all \
+                --limit 1 \
+                --json body \
+                --jq '.[0].body // ""'
+            )"
+            if [[ "$previous_body" != *"$marker"* ]]; then
+              echo "Refusing to overwrite unrelated branch: $branch" >&2
+              exit 1
+            fi
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch --force-create "$branch"
+          git add -- .chezmoidata/fonts.json
+          git commit -m 'chore(fonts): update managed releases'
+          if [ -n "$remote_sha" ]; then
+            git push \
+              --force-with-lease="refs/heads/$branch:$remote_sha" \
+              origin "HEAD:$branch"
+          else
+            git push origin "HEAD:$branch"
+          fi
+
+          open_pr="$(
+            gh pr list \
+              --head "$branch" \
+              --state open \
+              --limit 1 \
+              --json number \
+              --jq '.[0].number // ""'
+          )"
+          body="$marker
+          Updates pinned font releases and SHA-256 checksums."
+          if [ -n "$open_pr" ]; then
+            gh pr edit "$open_pr" \
+              --title 'chore(fonts): update managed releases' \
+              --body "$body"
+          else
+            gh pr create \
+              --head "$branch" \
+              --title 'chore(fonts): update managed releases' \
+              --body "$body"
+          fi
