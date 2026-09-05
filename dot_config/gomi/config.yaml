@@ -1,4 +1,4 @@
 core:
   trash:
     strategy: auto
-    gomi_dir: C:/msys64/home/Rollphes/.local/share/gomi
+    gomi_dir: "$XDG_DATA_HOME/gomi"
