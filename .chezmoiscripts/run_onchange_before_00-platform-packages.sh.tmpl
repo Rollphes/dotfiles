@@ -64,7 +64,7 @@ for package in $packages; do
     console_status "OK" "$package" "pkg" "installed"
 done
 {{ else if eq .chezmoi.os "linux" -}}
-packages="ca-certificates curl fish git git-lfs"
+packages="ca-certificates curl fish git git-lfs gnupg"
 
 console_header "$component" "Install required packages"
 console_context "APT"
