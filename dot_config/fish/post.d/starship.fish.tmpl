@@ -1,0 +1,20 @@
+if not command -q starship
+    return
+end
+
+{{ if eq .chezmoi.os "windows" -}}
+set -gx STARSHIP_CONFIG "{{ .chezmoi.homeDir }}/.config/starship.toml"
+set -gx STARSHIP_CACHE "{{ .chezmoi.homeDir }}/.cache/starship"
+{{ else -}}
+set -gx STARSHIP_CONFIG "$XDG_CONFIG_HOME/starship.toml"
+set -gx STARSHIP_CACHE "$XDG_CACHE_HOME/starship"
+{{ end -}}
+
+set -l init_file "$XDG_CACHE_HOME/fish/init/starship.fish"
+
+if test -r "$init_file"
+    source "$init_file"
+else
+    echo "fish: starship init cache missing; generating for this session" >&2
+    starship init fish --print-full-init | source
+end

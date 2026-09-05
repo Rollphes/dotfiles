@@ -1,0 +1,18 @@
+if not command -q atuin
+    return
+end
+
+{{ if eq .chezmoi.os "windows" -}}
+set -gx ATUIN_CONFIG_DIR "{{ .chezmoi.homeDir }}/.config/atuin"
+{{ else -}}
+set -gx ATUIN_CONFIG_DIR "$XDG_CONFIG_HOME/atuin"
+{{ end -}}
+
+set -l init_file "$XDG_CACHE_HOME/fish/init/atuin.fish"
+
+if test -r "$init_file"
+    source "$init_file"
+else
+    echo "fish: atuin init cache missing; generating for this session" >&2
+    atuin init fish --disable-up-arrow --disable-ai | source
+end

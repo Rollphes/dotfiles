@@ -1,0 +1,5 @@
+{{ if eq .chezmoi.os "windows" -}}
+set -gx YAZI_CONFIG_HOME "{{ .chezmoi.homeDir }}/.config/yazi"
+{{ else -}}
+set -gx YAZI_CONFIG_HOME "$XDG_CONFIG_HOME/yazi"
+{{ end -}}

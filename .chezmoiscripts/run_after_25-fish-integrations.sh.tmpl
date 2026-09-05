@@ -1,0 +1,44 @@
+#!/bin/sh
+set -eu
+
+{{ includeTemplate "lib/xdg-env.sh.tmpl" . }}
+{{ includeTemplate "lib/msys2-env.sh.tmpl" . }}
+{{ includeTemplate "lib/console.sh.tmpl" . }}
+
+component="fish-init"
+cache_dir="$XDG_CACHE_HOME/fish/init"
+
+export PATH="$HOME/.local/bin:$XDG_DATA_HOME/mise/shims:$PATH"
+
+# @param $1 Output file.
+# @param $2... Generator command and arguments.
+generate_init() (
+    output_file="$1"
+    shift
+
+    temp_file=$(mktemp "$cache_dir/.init.XXXXXX")
+    trap 'rm -f "$temp_file"' EXIT INT TERM
+
+    if ! "$@" >"$temp_file"; then
+        console_status "ERROR" "$(basename "$output_file")" "init" "generation failed"
+        console_failed "$component"
+        exit 1
+    fi
+
+    mv "$temp_file" "$output_file"
+    console_status "OK" "$(basename "$output_file")" "init" "generated"
+)
+
+console_header "$component" "Generate Fish integrations"
+console_context "$cache_dir"
+
+mkdir -p "$cache_dir"
+
+generate_init "$cache_dir/atuin.fish" \
+    atuin init fish --disable-up-arrow --disable-ai
+generate_init "$cache_dir/carapace.fish" carapace _carapace fish
+generate_init "$cache_dir/fzf.fish" fzf --fish
+generate_init "$cache_dir/starship.fish" starship init fish --print-full-init
+generate_init "$cache_dir/zoxide.fish" zoxide init fish
+
+console_complete "$component" "Fish integrations generated"
