@@ -126,12 +126,16 @@ jobs:
       - name: Initialize and apply
         if: runner.os != 'Windows'
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           chezmoi --source "$GITHUB_WORKSPACE" init --apply --no-tty
 
       - name: Initialize and apply on Windows
         if: runner.os == 'Windows'
         shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           chezmoi --source $env:GITHUB_WORKSPACE init --apply --no-tty
 
