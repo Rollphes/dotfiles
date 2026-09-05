@@ -1,0 +1,26 @@
+{
+  "fonts": [
+    {
+      "id": "0xproto",
+      "repository": "ryanoasis/nerd-fonts",
+      "tag": "v3.5.1",
+      "asset": "0xProto.zip",
+      "assetPattern": "^0xProto\\.zip$",
+      "sha256": "8951412356611266734e2e9904173d437b804af1ffce4fe1804feef4fe9c8c3b",
+      "filePattern": "^0xProtoNerdFont-[^/]+\\.ttf$",
+      "managedGlob": "0xProtoNerdFont-*.ttf",
+      "family": "0xProto Nerd Font"
+    },
+    {
+      "id": "udevgothic",
+      "repository": "yuru7/udev-gothic",
+      "tag": "v2.2.0",
+      "asset": "UDEVGothic_v2.2.0.zip",
+      "assetPattern": "^UDEVGothic_v[0-9.]+\\.zip$",
+      "sha256": "c104c171f6ed8922ca52d74cd915a271e427f1e884e51431aae71d99e8b3b47b",
+      "filePattern": "^UDEVGothic35JPDOC-[^/]+\\.ttf$",
+      "managedGlob": "UDEVGothic35JPDOC-*.ttf",
+      "family": "UDEV Gothic 35JPDOC"
+    }
+  ]
+}
