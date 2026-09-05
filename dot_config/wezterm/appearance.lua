@@ -1,5 +1,7 @@
 local M = {}
 
+local inspect_opacity = 0.2
+
 function M.apply(config, wezterm)
   config.font = wezterm.font_with_fallback {
     '0xProto Nerd Font',
@@ -47,6 +49,28 @@ function M.apply(config, wezterm)
     inactive_titlebar_bg = 'none',
     active_titlebar_bg = 'none',
   }
+end
+
+function M.background_inspect_action(wezterm)
+  return wezterm.action_callback(function(window)
+    local overrides = window:get_config_overrides() or {}
+
+    if overrides.window_background_opacity == inspect_opacity then
+      overrides.window_background_opacity = nil
+      overrides.win32_system_backdrop = nil
+      overrides.macos_window_background_blur = nil
+    else
+      overrides.window_background_opacity = inspect_opacity
+
+      if wezterm.target_triple:find('windows') then
+        overrides.win32_system_backdrop = 'Disable'
+      elseif wezterm.target_triple:find('apple') then
+        overrides.macos_window_background_blur = 0
+      end
+    end
+
+    window:set_config_overrides(overrides)
+  end)
 end
 
 return M
