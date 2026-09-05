@@ -187,10 +187,11 @@ jobs:
           rustup show active-toolchain
           & .github/scripts/verify-fonts.ps1
 
-          $rustupCommand = (Get-Command rustup -CommandType Application).Source
+          $rustupCommand = Get-Command rustup -CommandType Application |
+            Select-Object -First 1
           $expectedRustup = [IO.Path]::GetFullPath("$env:CARGO_HOME\bin\rustup.exe")
-          if ([IO.Path]::GetFullPath($rustupCommand) -ne $expectedRustup) {
-            throw "Unexpected rustup executable: $rustupCommand"
+          if ([IO.Path]::GetFullPath($rustupCommand.Source) -ne $expectedRustup) {
+            throw "Unexpected rustup executable: $($rustupCommand.Source)"
           }
 
           $rustupHome = rustup show home
