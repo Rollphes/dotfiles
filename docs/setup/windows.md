@@ -51,7 +51,8 @@ Install the required bootstrap packages:
 pacman -S --needed \
     fish \
     unzip \
-    mingw-w64-ucrt-x86_64-git
+    mingw-w64-ucrt-x86_64-git \
+    mingw-w64-ucrt-x86_64-git-lfs
 ```
 
 ## 5. Start Fish

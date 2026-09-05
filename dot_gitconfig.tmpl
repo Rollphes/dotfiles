@@ -1,0 +1,29 @@
+[user]
+    useConfigOnly = true
+    name = Rollphes
+    email = 70063670+Rollphes@users.noreply.github.com
+
+[core]
+    autocrlf = input
+
+[filter "lfs"]
+    required = true
+    clean = git-lfs clean -- %f
+    smudge = git-lfs smudge -- %f
+    process = git-lfs filter-process
+
+[http]
+    sslBackend = openssl
+
+[init]
+    defaultBranch = main
+
+{{ if eq .chezmoi.os "windows" -}}
+[credential "https://github.com"]
+    helper =
+    helper = !'{{ .chezmoi.homeDir }}/.local/share/mise/shims/gh.exe' auth git-credential
+
+[credential "https://gist.github.com"]
+    helper =
+    helper = !'{{ .chezmoi.homeDir }}/.local/share/mise/shims/gh.exe' auth git-credential
+{{ end -}}
