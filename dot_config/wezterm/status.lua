@@ -87,8 +87,7 @@ local function home_paths(wezterm)
 
     local username = os.getenv 'USERNAME'
     if username and username ~= '' then
-      add('C:/msys64/home/' .. username)
-      add('/c/msys64/home/' .. username)
+      add('/home/' .. username)
     end
   end
 

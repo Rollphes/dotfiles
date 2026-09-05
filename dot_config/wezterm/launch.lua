@@ -1,5 +1,7 @@
 local M = {}
 
+local msys2_root = 'C:\\msys64'
+
 local function windows_environment()
   return { MSYSTEM = 'UCRT64' }
 end
@@ -8,11 +10,11 @@ local function windows_fish_args(include_environment)
   local args = {}
 
   if include_environment then
-    table.insert(args, 'C:\\msys64\\usr\\bin\\env.exe')
+    table.insert(args, msys2_root .. '\\usr\\bin\\env.exe')
     table.insert(args, 'MSYSTEM=UCRT64')
   end
 
-  table.insert(args, 'C:\\msys64\\usr\\bin\\fish.exe')
+  table.insert(args, msys2_root .. '\\usr\\bin\\fish.exe')
   table.insert(args, '--login')
   table.insert(args, '-i')
 
