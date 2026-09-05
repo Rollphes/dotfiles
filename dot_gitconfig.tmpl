@@ -19,11 +19,12 @@
     defaultBranch = main
 
 {{ if eq .chezmoi.os "windows" -}}
+{{ $msysHome := .chezmoi.homeDir | replace "C:/" "/c/" -}}
 [credential "https://github.com"]
     helper =
-    helper = !'{{ .chezmoi.homeDir }}/.local/share/mise/shims/gh.exe' auth git-credential
+    helper = !PATH='{{ $msysHome }}/.local/bin':$PATH '{{ $msysHome }}/.local/share/mise/shims/gh.exe' auth git-credential
 
 [credential "https://gist.github.com"]
     helper =
-    helper = !'{{ .chezmoi.homeDir }}/.local/share/mise/shims/gh.exe' auth git-credential
+    helper = !PATH='{{ $msysHome }}/.local/bin':$PATH '{{ $msysHome }}/.local/share/mise/shims/gh.exe' auth git-credential
 {{ end -}}
