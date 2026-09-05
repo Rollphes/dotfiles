@@ -41,4 +41,6 @@ uv = "latest"
 "npm:wrangler" = "latest"
 "aqua:supabase/cli" = "latest"
 
+{{ if ne (env "GITHUB_ACTIONS") "true" -}}
 "cargo:keifu" = "latest"
+{{ end -}}

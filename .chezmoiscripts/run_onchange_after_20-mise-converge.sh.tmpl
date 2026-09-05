@@ -22,6 +22,10 @@ fi
 
 console_status "OK" "mise" "tool" "available"
 
+if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+    console_status "SKIP" "cargo:*" "backend" "excluded in CI"
+fi
+
 if ! mise install --yes; then
     console_status "ERROR" "toolset" "install" "mise install failed"
     console_failed "$component"
