@@ -1,12 +1,11 @@
-# XDG Base Directory Specification
+# Windows compatibility quarantine
 #
-# Development Session 内の XDG-aware tool は、
-# MSYS2 HOME を persistent storage の基準とする。
+# Development Session から起動した Windows-native tool が
+# APPDATA / LOCALAPPDATA に fallback した場合、
+# Windows Host profile を汚染せず MSYS2 HOME 内へ隔離する。
 #
-# Windows-native child process では MSYS2 runtime により
-# C:/msys64/home/<user>/... へ path conversion される。
+# ここに生成された state は「正常な保存先」ではなく、
+# tool-specific storage behavior を調査するための signal として扱う。
 
-set -gx XDG_CONFIG_HOME "$HOME/.config"
-set -gx XDG_DATA_HOME "$HOME/.local/share"
-set -gx XDG_STATE_HOME "$HOME/.local/state"
-set -gx XDG_CACHE_HOME "$HOME/.cache"
+set -gx APPDATA "$HOME/.winprofile/AppData/Roaming"
+set -gx LOCALAPPDATA "$HOME/.winprofile/AppData/Local"
