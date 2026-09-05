@@ -30,7 +30,11 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install -y chezmoi git openssh-client
+          sudo apt-get install -y curl git openssh-client
+          mkdir -p "$HOME/.local/bin"
+          sh -c "$(curl -fsLS https://get.chezmoi.io)" -- \
+            -b "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Bootstrap macOS
         if: runner.os == 'macOS'
