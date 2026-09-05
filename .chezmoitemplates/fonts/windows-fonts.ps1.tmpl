@@ -1,0 +1,127 @@
+param(
+    [Parameter(Mandatory = $true)]
+    [ValidateSet('Register', 'Validate', 'Verify')]
+    [string]$Mode,
+
+    [Parameter(Mandatory = $true)]
+    [string]$Family,
+
+    [Parameter(Mandatory = $true)]
+    [string]$ManagedGlob,
+
+    [Parameter(Mandatory = $true)]
+    [string]$ListFile
+)
+
+$ErrorActionPreference = 'Stop'
+
+Add-Type -AssemblyName System.Drawing
+Add-Type -Namespace DotfilesFonts -Name Native -MemberDefinition @'
+[DllImport("gdi32.dll", CharSet=CharSet.Unicode)]
+public static extern int AddFontResourceW(string lpFileName);
+[DllImport("user32.dll", CharSet=CharSet.Auto, SetLastError=true)]
+public static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint Msg, IntPtr wParam,
+    IntPtr lParam, uint fuFlags, uint uTimeout, out IntPtr lpdwResult);
+'@
+
+$registryKey = 'HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts'
+$paths = @(Get-Content -LiteralPath $ListFile | Where-Object { $_ })
+
+if ($paths.Count -eq 0) {
+    throw 'No managed font files were provided'
+}
+
+function Get-FontRegistrationName([string]$Path, [string]$ActualFamily) {
+    $stem = [IO.Path]::GetFileNameWithoutExtension($Path)
+    $separator = $stem.LastIndexOf('-')
+    $style = if ($separator -ge 0) { $stem.Substring($separator + 1) } else { 'Regular' }
+    return "$ActualFamily $style (TrueType)"
+}
+
+if ($Mode -eq 'Register' -and -not (Test-Path -LiteralPath $registryKey)) {
+    New-Item -Path $registryKey -Force | Out-Null
+}
+
+$expectedRegistrations = @{}
+
+foreach ($path in $paths) {
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        throw "Managed font is missing: $path"
+    }
+
+    $collection = [Drawing.Text.PrivateFontCollection]::new()
+    try {
+        $collection.AddFontFile($path)
+        $actualFamily = $collection.Families[0].Name
+    } finally {
+        $collection.Dispose()
+    }
+
+    if ($actualFamily -ne $Family) {
+        throw "Unexpected font family in $path`: $actualFamily"
+    }
+
+    $name = Get-FontRegistrationName $path $actualFamily
+    $expectedRegistrations[$name] = [IO.Path]::GetFullPath($path)
+
+    if ($Mode -eq 'Register') {
+        Set-ItemProperty -LiteralPath $registryKey -Name $name -Value $path
+        if ([DotfilesFonts.Native]::AddFontResourceW($path) -eq 0) {
+            throw "AddFontResourceW failed: $path"
+        }
+    }
+
+    if ($Mode -ne 'Validate') {
+        $registered = Get-ItemPropertyValue `
+            -LiteralPath $registryKey `
+            -Name $name `
+            -ErrorAction SilentlyContinue
+        if ($registered -ne $path) {
+            throw "Font registration is missing: $name"
+        }
+    }
+}
+
+if ($Mode -ne 'Validate') {
+    $properties = Get-ItemProperty -LiteralPath $registryKey
+    foreach ($property in $properties.PSObject.Properties) {
+        if ($property.Name.StartsWith('PS')) {
+            continue
+        }
+
+        $registeredPath = [string]$property.Value
+        if ([IO.Path]::GetFileName($registeredPath) -notlike $ManagedGlob) {
+            continue
+        }
+
+        $expectedPath = $expectedRegistrations[$property.Name]
+        $isExpected = $expectedPath -and (
+            $expectedPath -eq [IO.Path]::GetFullPath($registeredPath)
+        )
+        if ($isExpected) {
+            continue
+        }
+
+        if ($Mode -eq 'Register') {
+            Remove-ItemProperty -LiteralPath $registryKey -Name $property.Name
+        } else {
+            throw "Unexpected managed font registration: $($property.Name)"
+        }
+    }
+}
+
+if ($Mode -eq 'Register') {
+    $result = [IntPtr]::Zero
+    $sent = [DotfilesFonts.Native]::SendMessageTimeout(
+        [IntPtr]0xffff,
+        0x001D,
+        [IntPtr]::Zero,
+        [IntPtr]::Zero,
+        2,
+        5000,
+        [ref]$result
+    )
+    if ($sent -eq [IntPtr]::Zero) {
+        throw "WM_FONTCHANGE broadcast failed: $([Runtime.InteropServices.Marshal]::GetLastWin32Error())"
+    }
+}

@@ -1,0 +1,265 @@
+#!/bin/sh
+set -eu
+
+{{ includeTemplate "lib/xdg-env.sh.tmpl" . }}
+{{ includeTemplate "lib/console.sh.tmpl" . }}
+
+component="fonts"
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles-fonts"
+
+{{ if eq .chezmoi.os "windows" -}}
+font_os="windows"
+if ! command -v powershell.exe >/dev/null 2>&1; then
+    console_status "ERROR" "powershell.exe" "tool" "not found"
+    console_failed "$component"
+    exit 1
+fi
+windows_local_app_data="$(
+    powershell.exe -NoProfile -NonInteractive -Command \
+        '[Environment]::GetFolderPath("LocalApplicationData")' \
+        | tr -d '\r'
+)"
+if [ -z "$windows_local_app_data" ]; then
+    console_status "ERROR" "LocalApplicationData" "path" "not found"
+    console_failed "$component"
+    exit 1
+fi
+font_dir="$(cygpath -u "$windows_local_app_data")/Microsoft/Windows/Fonts"
+{{ else if eq .chezmoi.os "darwin" -}}
+font_dir="$HOME/Library/Fonts"
+font_os="darwin"
+{{ else -}}
+font_dir="${XDG_DATA_HOME:-$HOME/.local/share}/fonts"
+font_os="linux"
+{{ end -}}
+
+console_header "$component" "Converge managed fonts"
+console_context "$font_dir"
+
+for command in curl unzip; do
+    if ! command -v "$command" >/dev/null 2>&1; then
+        console_status "ERROR" "$command" "tool" "not found"
+        console_failed "$component"
+        exit 1
+    fi
+done
+
+if [ "$font_os" = linux ]; then
+    for command in fc-cache fc-scan; do
+        if ! command -v "$command" >/dev/null 2>&1; then
+            console_status "ERROR" "$command" "tool" "not found"
+            console_failed "$component"
+            exit 1
+        fi
+    done
+fi
+
+mkdir -p "$font_dir" "$state_dir"
+tmp_dir="$(mktemp -d)"
+trap 'rm -rf "$tmp_dir"' EXIT INT TERM
+
+{{ if eq .chezmoi.os "windows" -}}
+windows_helper="$tmp_dir/windows-fonts.ps1"
+cat > "$windows_helper" <<'POWERSHELL'
+{{ includeTemplate "fonts/windows-fonts.ps1.tmpl" . }}
+POWERSHELL
+{{ end -}}
+
+family_matches() (
+    expected_family=$1
+    files=$2
+    mode=$3
+    managed_glob=$4
+
+    case "$font_os" in
+        windows)
+            native_list="$tmp_dir/windows-paths.txt"
+            : > "$native_list"
+            while IFS= read -r file; do
+                [ -n "$file" ] && cygpath -w "$file" >> "$native_list"
+            done < "$files"
+            powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass \
+                -File "$(cygpath -w "$windows_helper")" \
+                -Mode "$mode" \
+                -Family "$expected_family" \
+                -ManagedGlob "$managed_glob" \
+                -ListFile "$(cygpath -w "$native_list")" \
+                >/dev/null 2>&1
+            ;;
+        linux)
+            while IFS= read -r file; do
+                [ -n "$file" ] || continue
+                [ "$(fc-scan --format '%{family[0]}' "$file")" = "$expected_family" ] \
+                    || return 1
+            done < "$files"
+            ;;
+        darwin)
+            return 0
+            ;;
+    esac
+)
+
+installed_files_valid() (
+    id=$1
+    expected_sha256=$2
+    expected_family=$3
+    managed_glob=$4
+    checksum_file="$state_dir/$id.sha256"
+    names_file="$state_dir/$id.files"
+
+    [ -f "$checksum_file" ] || return 1
+    [ "$(cat "$checksum_file")" = "$expected_sha256" ] || return 1
+    [ -s "$names_file" ] || return 1
+
+    paths_file="$tmp_dir/$id-installed.txt"
+    : > "$paths_file"
+    while IFS= read -r name; do
+        [ -n "$name" ] || continue
+        [ -f "$font_dir/$name" ] || return 1
+        printf '%s\n' "$font_dir/$name" >> "$paths_file"
+    done < "$names_file"
+
+    [ -s "$paths_file" ] || return 1
+    family_matches "$expected_family" "$paths_file" Verify "$managed_glob"
+)
+
+archive_sha256() {
+{{ if eq .chezmoi.os "darwin" -}}
+    shasum -a 256 "$1" | awk '{print $1}'
+{{ else -}}
+    sha256sum "$1" | awk '{print $1}'
+{{ end -}}
+}
+
+install_font() (
+    id=$1
+    repository=$2
+    tag=$3
+    asset=$4
+    expected_sha256=$5
+    file_pattern=$6
+    managed_glob=$7
+    expected_family=$8
+
+    if installed_files_valid "$id" "$expected_sha256" "$expected_family" "$managed_glob"; then
+        console_status "OK" "$id" "font" "$tag already installed"
+        return 0
+    fi
+
+    archive="$tmp_dir/$id.zip"
+    extract_dir="$tmp_dir/$id"
+    entries_file="$tmp_dir/$id.entries"
+    names_file="$tmp_dir/$id.names"
+    paths_file="$tmp_dir/$id-paths.txt"
+    url="https://github.com/$repository/releases/download/$tag/$asset"
+
+    console_status "RUN" "$id" "font" "installing $tag"
+    curl \
+        --proto '=https' \
+        --tlsv1.2 \
+        --fail \
+        --silent \
+        --show-error \
+        --location \
+        --output "$archive" \
+        "$url"
+
+    actual_sha256="$(archive_sha256 "$archive")"
+    if [ "$actual_sha256" != "$expected_sha256" ]; then
+        console_status "ERROR" "$id" "checksum" "SHA-256 mismatch"
+        return 1
+    fi
+
+    : > "$entries_file"
+    unzip -Z1 "$archive" | while IFS= read -r entry; do
+        name=${entry##*/}
+        if printf '%s\n' "$name" | grep -Eq "$file_pattern"; then
+            printf '%s\n' "$entry"
+        fi
+    done > "$entries_file"
+    if [ ! -s "$entries_file" ]; then
+        console_status "ERROR" "$id" "archive" "managed TTFs not found"
+        return 1
+    fi
+
+    mkdir -p "$extract_dir"
+    : > "$names_file"
+    : > "$paths_file"
+    while IFS= read -r entry; do
+        name=${entry##*/}
+        case "$name" in
+            *.ttf) ;;
+            *) return 1 ;;
+        esac
+        unzip -p "$archive" "$entry" > "$extract_dir/$name"
+        printf '%s\n' "$name" >> "$names_file"
+        printf '%s\n' "$extract_dir/$name" >> "$paths_file"
+    done < "$entries_file"
+
+    if ! family_matches "$expected_family" "$paths_file" Validate "$managed_glob"; then
+        console_status "ERROR" "$id" "font" "unexpected font family"
+        return 1
+    fi
+
+    changed=0
+    while IFS= read -r name; do
+        if [ -f "$font_dir/$name" ] \
+            && [ "$(archive_sha256 "$extract_dir/$name")" \
+                = "$(archive_sha256 "$font_dir/$name")" ]
+        then
+            continue
+        fi
+        cp "$extract_dir/$name" "$font_dir/$name"
+        changed=1
+    done < "$names_file"
+
+    for old_file in "$font_dir"/$managed_glob; do
+        [ -e "$old_file" ] || continue
+        old_name=${old_file##*/}
+        if ! grep -Fqx "$old_name" "$names_file"; then
+            rm -f "$old_file"
+        fi
+    done
+
+{{ if eq .chezmoi.os "windows" -}}
+    : > "$paths_file"
+    while IFS= read -r name; do
+        cygpath -w "$font_dir/$name" >> "$paths_file"
+    done < "$names_file"
+    powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass \
+        -File "$(cygpath -w "$windows_helper")" \
+        -Mode Register \
+        -Family "$expected_family" \
+        -ManagedGlob "$managed_glob" \
+        -ListFile "$(cygpath -w "$paths_file")" \
+        >/dev/null
+{{ else if eq .chezmoi.os "linux" -}}
+    if [ "$changed" -ne 0 ]; then
+        fc-cache -f "$font_dir" >/dev/null
+    fi
+{{ end -}}
+
+    cp "$names_file" "$state_dir/.$id.files"
+    printf '%s\n' "$expected_sha256" > "$state_dir/.$id.sha256"
+    mv "$state_dir/.$id.files" "$state_dir/$id.files"
+    mv "$state_dir/.$id.sha256" "$state_dir/$id.sha256"
+    console_status "OK" "$id" "font" "$tag installed"
+)
+
+while IFS='|' read -r id repository tag asset sha256 file_pattern managed_glob family; do
+    install_font \
+        "$id" \
+        "$repository" \
+        "$tag" \
+        "$asset" \
+        "$sha256" \
+        "$file_pattern" \
+        "$managed_glob" \
+        "$family"
+done <<'FONTS'
+{{ range .fonts -}}
+{{ .id }}|{{ .repository }}|{{ .tag }}|{{ .asset }}|{{ .sha256 }}|{{ .filePattern }}|{{ .managedGlob }}|{{ .family }}
+{{ end -}}
+FONTS
+
+console_complete "$component" "managed fonts current"
