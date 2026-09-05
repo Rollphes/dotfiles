@@ -1,6 +1,7 @@
 #!/bin/sh
 set -eu
 
+{{ includeTemplate "lib/xdg-env.sh.tmpl" . }}
 {{ includeTemplate "lib/msys2-env.sh.tmpl" . }}
 {{ includeTemplate "lib/rustup-env.sh.tmpl" . }}
 {{ includeTemplate "lib/console.sh.tmpl" . }}
