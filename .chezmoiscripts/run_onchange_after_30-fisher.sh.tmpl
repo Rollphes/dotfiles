@@ -28,6 +28,25 @@ fi
 
 console_status "OK" "curl" "tool" "available"
 
+manifest="$HOME/.config/fish/fish_plugins"
+tmp_dir="$(mktemp -d)"
+snapshot="$tmp_dir/fish_plugins"
+
+# Fisher always rewrites fish_plugins; preserve the chezmoi-owned manifest.
+restore_manifest() {
+    cp -p "$snapshot" "$manifest"
+}
+
+cleanup() {
+    restore_manifest 2>/dev/null || :
+    rm -rf "$tmp_dir"
+}
+
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
+cp -p "$manifest" "$snapshot"
+
+fisher_status=0
 if ! fish -c '
     if not functions -q fisher
         curl -sL https://raw.githubusercontent.com/jorgebucaran/fisher/main/functions/fisher.fish | source
@@ -35,6 +54,19 @@ if ! fish -c '
 
     fisher update
 '; then
+    fisher_status=1
+fi
+
+if ! restore_manifest; then
+    console_status "ERROR" "fish_plugins" "restore" "managed manifest restore failed"
+    console_failed "$component"
+    exit 1
+fi
+
+trap - EXIT HUP INT TERM
+rm -rf "$tmp_dir"
+
+if [ "$fisher_status" -ne 0 ]; then
     console_status "ERROR" "fish_plugins" "sync" "fisher update failed"
     console_failed "$component"
     exit 1
