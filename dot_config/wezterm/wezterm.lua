@@ -8,5 +8,6 @@ require('input').apply(config, wezterm)
 
 local workspace = require('workspace').actions(wezterm)
 require('ui').setup(wezterm, workspace)
+require('status').setup(wezterm)
 
 return config
