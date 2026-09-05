@@ -1,9 +1,8 @@
 # Windows Setup
 
-This document describes the initial setup process for the Windows development
-environment.
+This setup uses Windows 11 and the MSYS2 UCRT64 environment.
 
-## 1. Enable Windows Developer Mode
+## 1. Prepare Windows and MSYS2
 
 Enable Windows Developer Mode:
 
@@ -15,159 +14,148 @@ Settings
   -> Developer Mode
 ```
 
-Developer Mode is required to create the symbolic links managed by this
+Developer Mode is required for the Windows symbolic links managed by this
 repository.
 
-## 2. Install MSYS2
-
-Install MSYS2 to:
+Install [MSYS2] at the supported root:
 
 ```text
 C:\msys64
 ```
 
-## 3. Start the UCRT64 Environment
+[MSYS2]: https://www.msys2.org/
 
-Launch:
+Start the UCRT64 environment:
 
 ```text
 C:\msys64\ucrt64.exe
 ```
 
-## 4. Install Bootstrap Packages
-
-Update MSYS2:
+Update MSYS2 and install the bootstrap packages:
 
 ```sh
 pacman -Syu
-```
-
-If MSYS2 asks you to close the terminal during the update, launch
-`C:\msys64\ucrt64.exe` again and continue the update.
-
-Install the required bootstrap packages:
-
-```sh
 pacman -S --needed \
     fish \
     mingw-w64-ucrt-x86_64-curl \
     mingw-w64-ucrt-x86_64-git \
+    openssh \
     unzip
 ```
 
-## 5. Start Fish
+Restart the UCRT64 environment if requested during the update, then start
+Fish:
 
 ```sh
 fish
 ```
 
-## 6. Install chezmoi
+## 2. Install chezmoi and mise
 
 Install chezmoi into the MSYS2 home:
 
 ```fish
 mkdir -p "$HOME/.local/bin"
-
 curl -fsLS https://get.chezmoi.io \
     | sh -s -- -b "$HOME/.local/bin"
 ```
 
-Verify the installation:
-
-```fish
-"$HOME/.local/bin/chezmoi" --version
-```
-
-Use the full path during bootstrap because the repository-managed PATH
-configuration has not been applied yet.
-
-## 7. Install mise
-
-Download the latest Windows x64 release archive from:
-
-```text
-https://github.com/jdx/mise/releases
-```
-
-Download:
-
-```text
-mise-v<version>-windows-x64.zip
-```
-
-Extract the archive and copy both executables:
+Download `mise-v<version>-windows-x64.zip` from the [mise releases page].
+Extract it and copy both files into `$HOME/.local/bin`:
 
 ```text
 mise.exe
 mise-shim.exe
 ```
 
-into:
+In the UCRT64 environment, `$HOME/.local/bin` resolves under:
 
 ```text
-/home/<username>/.local/bin/
+C:\msys64\home\<username>\.local\bin
 ```
 
-Verify the installation:
+[mise releases page]: https://github.com/jdx/mise/releases
+
+Verify both bootstrap tools:
 
 ```fish
+"$HOME/.local/bin/chezmoi" --version
 "$HOME/.local/bin/mise.exe" --version
 ```
 
-Keep `mise-shim.exe` alongside `mise.exe`.
+## 3. Authenticate Git and Initialize
 
-## 8. Initialize the Dotfiles Repository
-
-Initialize chezmoi from the dotfiles repository:
+Configure [GitHub SSH authentication] before initialization. The managed
+GitHub CLI credential helper does not exist until after the first apply.
+Confirm that the SSH key is accepted:
 
 ```fish
-"$HOME/.local/bin/chezmoi" init <repository>
+ssh -T git@github.com
 ```
 
-The repository's `.chezmoi.toml.tmpl` generates the local chezmoi
-configuration during initialization.
+[GitHub SSH authentication]: https://docs.github.com/en/authentication/connecting-to-github-with-ssh
 
-Verify the destination:
+Then initialize through SSH:
+
+```fish
+"$HOME/.local/bin/chezmoi" init \
+    git@github.com:Rollphes/dotfiles.git
+```
+
+Do not replace `init` with a direct clone followed by `apply`. During init,
+the repository's `.chezmoi.toml.tmpl` creates the local chezmoi configuration
+that selects:
+
+```text
+destination: C:/msys64/home/<username>
+sh interpreter: C:/msys64/usr/bin/sh.exe
+```
+
+Verify that this contract was generated correctly:
 
 ```fish
 "$HOME/.local/bin/chezmoi" target-path
 ```
 
-Expected:
+The result must point to the MSYS2 home, not the Windows user home.
 
-```text
-C:/msys64/home/<username>
-```
-
-## 9. Apply the Configuration
-
-Apply the repository configuration:
+Inspect and apply the managed state:
 
 ```fish
+"$HOME/.local/bin/chezmoi" diff
 "$HOME/.local/bin/chezmoi" apply
 ```
 
-Existing conflicting Windows files or directories are not migrated or
-overwritten automatically.
+The apply installs the remaining MSYS2 dependencies, including Git LFS, and
+converges Rust, mise tools, Fish integrations, and the selected Windows
+bridges. Existing conflicting Windows resources are not overwritten.
 
-## 10. Install WezTerm Nightly
+Verify the managed tools:
 
-Install the Windows native WezTerm Nightly build from:
-
-```text
-https://wezterm.org/install/windows.html
+```fish
+git lfs version
+mise --version
+rustup show active-toolchain
 ```
 
-Use the Nightly Windows build.
+## 4. Authenticate GitHub CLI
 
-The WezTerm configuration is managed by this repository.
+Authentication remains machine-local:
 
-## 11. Start WezTerm
+```fish
+gh auth login
+gh auth status
+```
 
-Close the bootstrap terminal and start WezTerm.
+The Windows Git config is a symlink to the canonical config in the MSYS2
+home. The managed credential helper calls the stable mise shim.
 
-The managed WezTerm configuration starts the MSYS2 development environment
-with Fish.
+## 5. Install WezTerm Nightly
 
-After startup, `chezmoi` and `mise` should be available directly from the
-managed PATH.
+Install the Windows Nightly build from the [WezTerm installation page], then
+start WezTerm.
+
+[WezTerm installation page]: https://wezterm.org/install/windows.html
+
+The managed configuration launches UCRT64 Fish and keeps the Windows and
+MSYS2 homes isolated except for the selected bridges.

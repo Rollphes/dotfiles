@@ -13,6 +13,7 @@ fish
 mingw-w64-ucrt-x86_64-curl
 mingw-w64-ucrt-x86_64-git
 mingw-w64-ucrt-x86_64-git-lfs
+openssh
 unzip
 "
 
@@ -64,7 +65,7 @@ for package in $packages; do
     console_status "OK" "$package" "pkg" "installed"
 done
 {{ else if eq .chezmoi.os "linux" -}}
-packages="ca-certificates curl fish git git-lfs gnupg"
+packages="ca-certificates curl fish git git-lfs gnupg openssh-client"
 
 console_header "$component" "Install required packages"
 console_context "APT"
