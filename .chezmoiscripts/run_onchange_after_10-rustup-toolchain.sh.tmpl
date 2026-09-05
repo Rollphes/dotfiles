@@ -1,8 +1,4 @@
 #!/bin/sh
-{{ if ne .chezmoi.os "windows" -}}
-exit 0
-{{ end -}}
-
 set -eu
 
 {{ includeTemplate "lib/msys2-env.sh.tmpl" . }}

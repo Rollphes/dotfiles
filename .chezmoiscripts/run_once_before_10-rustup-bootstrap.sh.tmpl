@@ -1,8 +1,4 @@
 #!/bin/sh
-{{ if ne .chezmoi.os "windows" -}}
-exit 0
-{{ end -}}
-
 set -eu
 
 {{ includeTemplate "lib/msys2-env.sh.tmpl" . }}
@@ -23,7 +19,13 @@ fi
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT INT TERM
 
+{{ if eq .chezmoi.os "windows" -}}
 installer="$tmp_dir/rustup-init.exe"
+installer_url="https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe"
+{{ else -}}
+installer="$tmp_dir/rustup-init.sh"
+installer_url="https://sh.rustup.rs"
+{{ end -}}
 
 console_status "RUN" "rustup-init" "download" "downloading installer"
 
@@ -35,7 +37,7 @@ if ! curl \
     --show-error \
     --location \
     --output "$installer" \
-    "https://static.rust-lang.org/rustup/dist/x86_64-pc-windows-msvc/rustup-init.exe"
+    "$installer_url"
 then
     console_status "ERROR" "rustup-init" "download" "download failed"
     console_failed "$component"
@@ -44,6 +46,7 @@ fi
 
 console_status "RUN" "rustup" "install" "installing manager"
 
+{{ if eq .chezmoi.os "windows" -}}
 if ! "$installer" \
     -y \
     --no-modify-path \
@@ -51,6 +54,14 @@ if ! "$installer" \
     --default-toolchain none \
     --profile minimal
 then
+{{ else -}}
+if ! sh "$installer" \
+    -y \
+    --no-modify-path \
+    --default-toolchain none \
+    --profile minimal
+then
+{{ end -}}
     console_status "ERROR" "rustup" "install" "installation failed"
     console_failed "$component"
     exit 1
