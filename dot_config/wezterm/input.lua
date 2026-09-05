@@ -5,13 +5,6 @@ local M = {}
 
 function M.apply(config, wezterm)
   local act = wezterm.action
-  local help_choices = {
-    { label = 'Paste       Right click           Clipboard paste' },
-    { label = 'Paste       Ctrl+Shift+V          Clipboard paste' },
-    { label = 'Paste       Shift+Insert          Clipboard paste' },
-    { label = 'Appearance  Ctrl+Shift+B          Background Inspect' },
-    { label = 'Help        Ctrl+Shift+?          This keybinding sheet' },
-  }
 
   config.mouse_bindings = {
     {
@@ -45,7 +38,7 @@ function M.apply(config, wezterm)
     {
       key = '?',
       mods = 'CTRL|SHIFT',
-      action = help.action(wezterm, help_choices),
+      action = help.action(wezterm),
     },
   }
 end
