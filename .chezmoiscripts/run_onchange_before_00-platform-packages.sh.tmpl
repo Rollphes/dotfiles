@@ -37,7 +37,7 @@ for package in $packages; do
     console_status "OK" "$package" "pkg" "installed"
 done
 {{ else if eq .chezmoi.os "darwin" -}}
-packages="fish git-lfs"
+packages="btop fish git-lfs"
 
 console_header "$component" "Install required packages"
 console_context "Homebrew"
