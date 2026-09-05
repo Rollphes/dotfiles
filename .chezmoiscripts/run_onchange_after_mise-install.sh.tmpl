@@ -8,7 +8,7 @@ set -eu
 
 component="mise"
 
-console_header "$component" "Install managed tools"
+console_header "$component" "Converge managed tools"
 console_context "$HOME/.config/mise/config.toml"
 
 export PATH="$HOME/.local/bin:$PATH"
@@ -22,10 +22,18 @@ fi
 console_status "OK" "mise" "tool" "available"
 
 if ! mise install --yes; then
-    console_status "ERROR" "toolset" "sync" "mise install failed"
+    console_status "ERROR" "toolset" "install" "mise install failed"
     console_failed "$component"
     exit 1
 fi
 
-console_status "OK" "toolset" "sync" "managed tools installed"
-console_complete "$component" "managed tools installed"
+console_status "OK" "toolset" "install" "missing tools installed"
+
+if ! mise upgrade --yes --no-prune; then
+    console_status "ERROR" "toolset" "upgrade" "mise upgrade failed"
+    console_failed "$component"
+    exit 1
+fi
+
+console_status "OK" "toolset" "upgrade" "managed versions current"
+console_complete "$component" "managed tools converged"
