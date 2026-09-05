@@ -1,5 +1,5 @@
 [tools]
-node = "latest"
+node = "lts"
 
 "aqua:starship/starship" = "latest"
 "aqua:carapace-sh/carapace-bin" = "latest"
@@ -16,7 +16,9 @@ zoxide = "latest"
 "aqua:babarot/gomi" = "latest"
 "aqua:bootandy/dust" = "latest"
 "aqua:boyter/scc" = "latest"
+{{ if eq .chezmoi.os "windows" -}}
 "github:aristocratos/btop4win" = "latest"
+{{ end -}}
 
 "aqua:cli/cli" = "latest"
 "aqua:nektos/act" = "latest"
