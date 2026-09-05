@@ -39,9 +39,10 @@ chezmoi diff
 chezmoi apply
 ```
 
-The apply process installs CA certificates, curl, Fish, Git, Git LFS, GnuPG,
-and the OpenSSH client through APT. It then bootstraps mise and rustup,
-installs the native stable Rust toolchain, and converges the mise toolset.
+The apply process installs CA certificates, curl, Fish, fontconfig, Git, Git
+LFS, GnuPG, the OpenSSH client, and unzip through APT. It then bootstraps mise
+and rustup, installs the native stable Rust toolchain, converges the mise
+toolset, and installs managed fonts under the XDG data directory.
 
 If packages are missing, APT may ask for the sudo password during this first
 apply.

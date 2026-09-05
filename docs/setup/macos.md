@@ -40,7 +40,7 @@ chezmoi apply
 
 The apply process installs Fish and Git LFS through Homebrew, bootstraps mise
 and rustup, installs the native stable Rust toolchain, and converges the mise
-toolset.
+toolset. Managed fonts are installed in `~/Library/Fonts`.
 
 Start a managed Fish session:
 

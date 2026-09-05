@@ -127,8 +127,9 @@ Inspect and apply the managed state:
 ```
 
 The apply installs the remaining MSYS2 dependencies, including Git LFS, and
-converges Rust, mise tools, Fish integrations, and the selected Windows
-bridges. Existing conflicting Windows resources are not overwritten.
+converges Rust, mise tools, Fish integrations, managed user fonts, and the
+selected Windows bridges. Existing conflicting Windows resources are not
+overwritten.
 
 Verify the managed tools:
 
