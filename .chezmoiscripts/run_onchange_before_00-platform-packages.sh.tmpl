@@ -1,0 +1,124 @@
+#!/bin/sh
+set -eu
+
+{{ includeTemplate "lib/xdg-env.sh.tmpl" . }}
+{{ includeTemplate "lib/msys2-env.sh.tmpl" . }}
+{{ includeTemplate "lib/console.sh.tmpl" . }}
+
+component="packages"
+
+{{ if eq .chezmoi.os "windows" -}}
+packages="
+fish
+mingw-w64-ucrt-x86_64-curl
+mingw-w64-ucrt-x86_64-git
+mingw-w64-ucrt-x86_64-git-lfs
+unzip
+"
+
+console_header "$component" "Install required packages"
+console_context "pacman"
+
+for package in $packages; do
+    if pacman -Q "$package" >/dev/null 2>&1; then
+        console_status "OK" "$package" "pkg" "already installed"
+        continue
+    fi
+
+    console_status "RUN" "$package" "pkg" "installing"
+
+    if ! pacman -S --needed --noconfirm "$package"; then
+        console_status "ERROR" "$package" "pkg" "installation failed"
+        console_failed "$component"
+        exit 1
+    fi
+
+    console_status "OK" "$package" "pkg" "installed"
+done
+{{ else if eq .chezmoi.os "darwin" -}}
+packages="fish git-lfs"
+
+console_header "$component" "Install required packages"
+console_context "Homebrew"
+
+if ! command -v brew >/dev/null 2>&1; then
+    console_status "ERROR" "brew" "tool" "not found"
+    console_failed "$component"
+    exit 1
+fi
+
+for package in $packages; do
+    if brew list --formula "$package" >/dev/null 2>&1; then
+        console_status "OK" "$package" "pkg" "already installed"
+        continue
+    fi
+
+    console_status "RUN" "$package" "pkg" "installing"
+
+    if ! brew install "$package"; then
+        console_status "ERROR" "$package" "pkg" "installation failed"
+        console_failed "$component"
+        exit 1
+    fi
+
+    console_status "OK" "$package" "pkg" "installed"
+done
+{{ else if eq .chezmoi.os "linux" -}}
+packages="ca-certificates curl fish git git-lfs"
+
+console_header "$component" "Install required packages"
+console_context "APT"
+
+if [ ! -r /etc/os-release ]; then
+    console_status "ERROR" "os-release" "platform" "not found"
+    console_failed "$component"
+    exit 1
+fi
+
+. /etc/os-release
+
+case "$ID" in
+    debian|ubuntu)
+        ;;
+    *)
+        console_status "ERROR" "$ID" "platform" "unsupported Linux distribution"
+        console_failed "$component"
+        exit 1
+        ;;
+esac
+
+missing=""
+for package in $packages; do
+    if dpkg-query -W -f='${Status}' "$package" 2>/dev/null \
+        | grep -q '^install ok installed$'
+    then
+        console_status "OK" "$package" "pkg" "already installed"
+    else
+        missing="$missing $package"
+    fi
+done
+
+if [ -n "$missing" ]; then
+    if [ "$(id -u)" -eq 0 ]; then
+        sudo=""
+    elif command -v sudo >/dev/null 2>&1; then
+        sudo="sudo"
+    else
+        console_status "ERROR" "sudo" "tool" "required to install packages"
+        console_failed "$component"
+        exit 1
+    fi
+
+    if ! $sudo apt-get update || ! $sudo apt-get install -y $missing; then
+        console_status "ERROR" "apt" "pkg" "installation failed"
+        console_failed "$component"
+        exit 1
+    fi
+
+    for package in $missing; do
+        console_status "OK" "$package" "pkg" "installed"
+    done
+fi
+{{ end -}}
+
+console_complete "$component" "required packages installed"

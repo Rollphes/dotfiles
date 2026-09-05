@@ -1,0 +1,49 @@
+#!/bin/sh
+set -eu
+
+{{ includeTemplate "lib/xdg-env.sh.tmpl" . }}
+{{ includeTemplate "lib/msys2-env.sh.tmpl" . }}
+{{ includeTemplate "lib/console.sh.tmpl" . }}
+
+{{ if ne .chezmoi.os "windows" -}}
+component="mise"
+
+console_header "$component" "Bootstrap tool manager"
+console_context "$HOME/.local/bin/mise"
+
+export PATH="$HOME/.local/bin:$PATH"
+
+if command -v mise >/dev/null 2>&1; then
+    console_status "OK" "mise" "tool" "already installed"
+    console_complete "$component" "bootstrap already satisfied"
+    exit 0
+fi
+
+tmp_dir="$(mktemp -d)"
+trap 'rm -rf "$tmp_dir"' EXIT INT TERM
+installer="$tmp_dir/install-mise.sh"
+
+if ! curl \
+    --proto '=https' \
+    --tlsv1.2 \
+    --fail \
+    --silent \
+    --show-error \
+    --location \
+    --output "$installer" \
+    https://mise.run
+then
+    console_status "ERROR" "mise" "download" "download failed"
+    console_failed "$component"
+    exit 1
+fi
+
+if ! MISE_INSTALL_PATH="$HOME/.local/bin/mise" sh "$installer"; then
+    console_status "ERROR" "mise" "install" "installation failed"
+    console_failed "$component"
+    exit 1
+fi
+
+console_status "OK" "mise" "tool" "installed"
+console_complete "$component" "tool manager installed"
+{{ end -}}
