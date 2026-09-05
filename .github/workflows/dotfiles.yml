@@ -241,10 +241,23 @@ jobs:
             if ($link.LinkType -ne 'SymbolicLink') {
               throw "Bridge is not a symbolic link: $linkPath"
             }
-            $actual = [IO.Path]::GetFullPath(
-              (Join-Path $link.DirectoryName $link.Target)
+            $resolvedTarget = $link.ResolveLinkTarget($false)
+            if ($null -eq $resolvedTarget) {
+              throw "Unable to resolve bridge target: $linkPath"
+            }
+            $actual = [IO.Path]::GetFullPath($resolvedTarget.FullName).TrimEnd(
+              [IO.Path]::DirectorySeparatorChar,
+              [IO.Path]::AltDirectorySeparatorChar
             )
-            if ($actual -ne [IO.Path]::GetFullPath($expected)) {
+            $expected = [IO.Path]::GetFullPath($expected).TrimEnd(
+              [IO.Path]::DirectorySeparatorChar,
+              [IO.Path]::AltDirectorySeparatorChar
+            )
+            if (-not [string]::Equals(
+              $actual,
+              $expected,
+              [StringComparison]::OrdinalIgnoreCase
+            )) {
               throw "Unexpected bridge target: $linkPath -> $actual"
             }
           }
