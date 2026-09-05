@@ -202,15 +202,16 @@ jobs:
             throw "Rust escaped the MSYS2 home: $rustupHome"
           }
 
-          $fishEnvironment = & 'C:\msys64\usr\bin\fish.exe' -c @'
-          printf '%s\n' \
-            "$XDG_CONFIG_HOME" \
-            "$XDG_DATA_HOME" \
-            "$XDG_STATE_HOME" \
-            "$XDG_CACHE_HOME" \
-            "$APPDATA" \
-            "$LOCALAPPDATA"
+          $fishEnvironment = @(& 'C:\msys64\usr\bin\fish.exe' -c @'
+          printf '%s\n' "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$APPDATA" "$LOCALAPPDATA"
           '@
+          )
+          $emptyEnvironment = @(
+            $fishEnvironment | Where-Object { [string]::IsNullOrWhiteSpace($_) }
+          )
+          if ($fishEnvironment.Count -ne 6 -or $emptyEnvironment.Count -ne 0) {
+            throw "Unexpected Fish environment output: $($fishEnvironment.Count) values"
+          }
           $expectedEnvironment = @(
             "$env:HOME\.config",
             "$env:HOME\.local\share",
