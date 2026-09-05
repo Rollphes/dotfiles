@@ -46,12 +46,17 @@ jobs:
         shell: pwsh
         run: |
           $msysHome = "C:\msys64\home\$env:USERNAME"
+          $cargoHome = "$msysHome\.cargo"
+          $rustupHome = "$msysHome\.rustup"
           New-Item -ItemType Directory -Force -Path $msysHome | Out-Null
           "HOME=$msysHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "CARGO_HOME=$cargoHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "RUSTUP_HOME=$rustupHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           'MSYSTEM=UCRT64' | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           'C:\msys64\ucrt64\bin' | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
           'C:\msys64\usr\bin' | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
           "$msysHome\.local\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          "$cargoHome\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
 
           $developerMode = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock'
           New-Item -Path $developerMode -Force | Out-Null
@@ -166,7 +171,7 @@ jobs:
           $env:PATH = @(
             "$env:HOME\.local\bin",
             "$env:HOME\.local\share\mise\shims",
-            "$env:HOME\.cargo\bin",
+            "$env:CARGO_HOME\bin",
             $env:PATH
           ) -join ';'
 
@@ -182,10 +187,16 @@ jobs:
           rustup show active-toolchain
           & .github/scripts/verify-fonts.ps1
 
+          $rustupCommand = (Get-Command rustup -CommandType Application).Source
+          $expectedRustup = [IO.Path]::GetFullPath("$env:CARGO_HOME\bin\rustup.exe")
+          if ([IO.Path]::GetFullPath($rustupCommand) -ne $expectedRustup) {
+            throw "Unexpected rustup executable: $rustupCommand"
+          }
+
           $rustupHome = rustup show home
           if (
             [IO.Path]::GetFullPath($rustupHome) -ne
-            [IO.Path]::GetFullPath("$env:HOME\.rustup")
+            [IO.Path]::GetFullPath($env:RUSTUP_HOME)
           ) {
             throw "Rust escaped the MSYS2 home: $rustupHome"
           }
