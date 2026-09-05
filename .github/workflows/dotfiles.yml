@@ -1,0 +1,245 @@
+name: Dotfiles
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    name: Apply (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - windows-latest
+          - macos-latest
+          - ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bootstrap Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chezmoi git openssh-client
+
+      - name: Bootstrap macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: brew install chezmoi
+
+      - name: Prepare Windows contract
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $msysHome = "C:\msys64\home\$env:USERNAME"
+          New-Item -ItemType Directory -Force -Path $msysHome | Out-Null
+          "HOME=$msysHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          'MSYSTEM=UCRT64' | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          'C:\msys64\ucrt64\bin' | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          'C:\msys64\usr\bin' | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          "$msysHome\.local\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+          $developerMode = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock'
+          New-Item -Path $developerMode -Force | Out-Null
+          New-ItemProperty `
+            -Path $developerMode `
+            -Name AllowDevelopmentWithoutDevLicense `
+            -PropertyType DWord `
+            -Value 1 `
+            -Force | Out-Null
+
+          foreach ($relativePath in @(
+            '.config\wezterm',
+            '.agents',
+            '.claude',
+            '.codex',
+            '.claude.json',
+            '.gitconfig',
+            '.npmrc'
+          )) {
+            $path = Join-Path $env:USERPROFILE $relativePath
+            if (Test-Path -LiteralPath $path) {
+              Remove-Item -LiteralPath $path -Recurse -Force
+            }
+          }
+
+      - name: Install Windows bootstrap packages
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & 'C:\msys64\usr\bin\bash.exe' -lc @'
+          pacman -Sy --needed --noconfirm \
+            fish \
+            mingw-w64-ucrt-x86_64-curl \
+            mingw-w64-ucrt-x86_64-git \
+            openssh \
+            unzip
+          '@
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Install chezmoi and mise on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          & 'C:\msys64\usr\bin\bash.exe' -lc @'
+          mkdir -p "$HOME/.local/bin"
+          curl -fsLS https://get.chezmoi.io | sh -s -- -b "$HOME/.local/bin"
+          '@
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $release = gh api repos/jdx/mise/releases/latest | ConvertFrom-Json
+          $asset = @(
+            $release.assets | Where-Object name -Match '^mise-v[0-9.]+-windows-x64\.zip$'
+          )
+          if ($asset.Count -ne 1) {
+            throw "Expected one mise Windows asset, found $($asset.Count)"
+          }
+
+          $archive = Join-Path $env:RUNNER_TEMP 'mise.zip'
+          $extract = Join-Path $env:RUNNER_TEMP 'mise'
+          Invoke-WebRequest -Uri $asset[0].browser_download_url -OutFile $archive
+          Expand-Archive -LiteralPath $archive -DestinationPath $extract -Force
+          foreach ($name in 'mise.exe', 'mise-shim.exe') {
+            $binary = Get-ChildItem -LiteralPath $extract -Recurse -Filter $name -File
+            if ($binary.Count -ne 1) {
+              throw "Expected one $name, found $($binary.Count)"
+            }
+            Copy-Item $binary.FullName (Join-Path "$env:HOME\.local\bin" $name)
+          }
+
+      - name: Initialize and apply
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          chezmoi --source "$GITHUB_WORKSPACE" init --apply --no-tty
+
+      - name: Initialize and apply on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          chezmoi --source $env:GITHUB_WORKSPACE init --apply --no-tty
+
+      - name: Verify managed contracts
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          export PATH="$HOME/.local/bin:$HOME/.local/share/mise/shims:$HOME/.cargo/bin:$PATH"
+
+          [[ "$(chezmoi --source "$GITHUB_WORKSPACE" target-path)" == "$HOME" ]]
+          git lfs version
+          mise --version
+          rustup show active-toolchain
+          bash .github/scripts/verify-fonts.sh
+
+          second_apply="$(chezmoi --source "$GITHUB_WORKSPACE" apply --no-tty)"
+          printf '%s\n' "$second_apply"
+          [[ "$(grep -c 'already installed' <<< "$second_apply")" -eq 2 ]]
+
+          diff="$(chezmoi --source "$GITHUB_WORKSPACE" diff --no-pager --exclude scripts)"
+          [[ -z "$diff" ]]
+          [[ -z "$(git status --porcelain)" ]]
+
+      - name: Verify managed contracts on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:PATH = @(
+            "$env:HOME\.local\bin",
+            "$env:HOME\.local\share\mise\shims",
+            "$env:HOME\.cargo\bin",
+            $env:PATH
+          ) -join ';'
+
+          $targetPath = [IO.Path]::GetFullPath(
+            (chezmoi --source $env:GITHUB_WORKSPACE target-path)
+          )
+          if ($targetPath -ne [IO.Path]::GetFullPath($env:HOME)) {
+            throw "Unexpected chezmoi destination: $targetPath"
+          }
+
+          git lfs version
+          mise --version
+          rustup show active-toolchain
+          & .github/scripts/verify-fonts.ps1
+
+          $rustupHome = rustup show home
+          if (
+            [IO.Path]::GetFullPath($rustupHome) -ne
+            [IO.Path]::GetFullPath("$env:HOME\.rustup")
+          ) {
+            throw "Rust escaped the MSYS2 home: $rustupHome"
+          }
+
+          $fishEnvironment = & 'C:\msys64\usr\bin\fish.exe' -c @'
+          printf '%s\n' \
+            "$XDG_CONFIG_HOME" \
+            "$XDG_DATA_HOME" \
+            "$XDG_STATE_HOME" \
+            "$XDG_CACHE_HOME" \
+            "$APPDATA" \
+            "$LOCALAPPDATA"
+          '@
+          $expectedEnvironment = @(
+            "$env:HOME\.config",
+            "$env:HOME\.local\share",
+            "$env:HOME\.local\state",
+            "$env:HOME\.cache",
+            "$env:HOME\.winprofile\AppData\Roaming",
+            "$env:HOME\.winprofile\AppData\Local"
+          ) | ForEach-Object { [IO.Path]::GetFullPath($_) }
+          $actualEnvironment = $fishEnvironment | ForEach-Object {
+            [IO.Path]::GetFullPath(
+              (& 'C:\msys64\usr\bin\cygpath.exe' -w $_)
+            )
+          }
+          if (Compare-Object $expectedEnvironment $actualEnvironment) {
+            throw 'Fish environment escaped the MSYS2 home quarantine'
+          }
+
+          $miseData = [IO.Path]::GetFullPath("$env:HOME\.local\share\mise")
+          if (-not (Test-Path -LiteralPath $miseData -PathType Container)) {
+            throw "mise data is missing from the MSYS2 home: $miseData"
+          }
+
+          foreach ($relativePath in '.gitconfig', '.config\wezterm') {
+            $linkPath = Join-Path $env:USERPROFILE $relativePath
+            $expected = Join-Path $env:HOME $relativePath
+            $link = Get-Item -LiteralPath $linkPath -Force
+            if ($link.LinkType -ne 'SymbolicLink') {
+              throw "Bridge is not a symbolic link: $linkPath"
+            }
+            $actual = [IO.Path]::GetFullPath(
+              (Join-Path $link.DirectoryName $link.Target)
+            )
+            if ($actual -ne [IO.Path]::GetFullPath($expected)) {
+              throw "Unexpected bridge target: $linkPath -> $actual"
+            }
+          }
+
+          $secondApply = chezmoi --source $env:GITHUB_WORKSPACE apply --no-tty
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $secondApply
+          if (@($secondApply | Select-String -SimpleMatch 'already installed').Count -ne 2) {
+            throw 'Second apply reinstalled a managed font'
+          }
+
+          $diff = chezmoi `
+            --source $env:GITHUB_WORKSPACE `
+            diff `
+            --no-pager `
+            --exclude scripts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($diff) { throw "chezmoi diff is not empty`n$diff" }
+          if (git status --porcelain) { throw 'Source tree is not clean' }
