@@ -11,7 +11,7 @@ component="rustup"
 console_header "$component" "Bootstrap Rust toolchain manager"
 console_context "$RUSTUP_HOME"
 
-if command -v rustup >/dev/null 2>&1; then
+if [ -x "$CARGO_HOME/bin/rustup" ] || [ -x "$CARGO_HOME/bin/rustup.exe" ]; then
     console_status "OK" "rustup" "tool" "already installed"
     console_complete "$component" "bootstrap already satisfied"
     exit 0
