@@ -1,4 +1,3 @@
-
 if not command -q starship
     return
 end

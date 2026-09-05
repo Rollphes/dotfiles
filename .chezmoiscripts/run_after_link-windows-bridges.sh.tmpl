@@ -3,11 +3,10 @@ set -eu
 
 {{ if eq .chezmoi.os "windows" -}}
 
-{{ includeTemplate "lib/console.sh.tmpl" . }}
 {{ includeTemplate "lib/msys2-env.sh.tmpl" . }}
+{{ includeTemplate "lib/console.sh.tmpl" . }}
 
-# Prevent MSYS2 argument conversion from rewriting Windows CLI arguments
-# such as mklink's /D and reg.exe's /v.
+# Preserve mklink /D and reg.exe /v arguments across MSYS2 conversion.
 export MSYS_NO_PATHCONV=1
 
 component="windows-bridges"
@@ -149,8 +148,6 @@ reconcile_one() {
     src="$msys_home/$name"
     dst="$win_home/$name"
 
-    # Existing Windows-side symlink:
-    # verify that it resolves to the canonical MSYS2-side target.
     if [ -L "$dst" ]; then
         actual=$(resolve_path "$dst") ||
             fail_broken_link "$name" "$kind" "$dst" "$src"
@@ -172,8 +169,7 @@ reconcile_one() {
         return 0
     fi
 
-    # A real Windows-side resource violates the topology.
-    # Never overwrite or migrate it automatically.
+    # Never replace a real Windows-side resource automatically.
     if [ -e "$dst" ]; then
         if [ -d "$dst" ]; then
             actual_type="real directory"
@@ -191,12 +187,10 @@ reconcile_one() {
             "$actual_type"
     fi
 
-    # Directory bridges establish their canonical MSYS2-side target eagerly.
     if [ "$kind" = "dir" ] && [ ! -e "$src" ]; then
         mkdir -p "$src"
     fi
 
-    # File bridges wait until their canonical MSYS2-side file exists.
     if [ ! -e "$src" ]; then
         console_status \
             "WARN" \
@@ -210,8 +204,7 @@ reconcile_one() {
 
     require_developer_mode "$name" "$kind"
 
-    # The Windows-side parent may remain host-local while only this child
-    # resource is bridged.
+    # Only the selected child is bridged; its parent remains host-local.
     mkdir -p "$(dirname "$dst")"
 
     dst_win=$(cygpath -w "$dst")

@@ -1,7 +1,7 @@
-if status is-interactive
-    set -gx CARAPACE_BRIDGES 'bash,zsh,fish,inshellisense'
-
-    if command -q carapace
-        carapace _carapace fish | source
-    end
+if not command -q carapace
+    return
 end
+
+set -gx CARAPACE_BRIDGES 'bash,zsh,fish,inshellisense'
+
+carapace _carapace fish | source
