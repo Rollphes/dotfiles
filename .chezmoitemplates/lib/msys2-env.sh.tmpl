@@ -1,4 +1,7 @@
 {{- if eq .chezmoi.os "windows" }}
 export APPDATA="$HOME/.winprofile/AppData/Roaming"
 export LOCALAPPDATA="$HOME/.winprofile/AppData/Local"
+export UV_CACHE_DIR="$XDG_CACHE_HOME/uv"
+export UV_TOOL_DIR="$XDG_DATA_HOME/uv/tools"
+export UV_PYTHON_INSTALL_DIR="$XDG_DATA_HOME/uv/python"
 {{- end }}
