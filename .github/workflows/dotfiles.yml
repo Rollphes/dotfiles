@@ -179,7 +179,7 @@ jobs:
           chezmoi --source $env:GITHUB_WORKSPACE init --apply --no-tty
 
       - name: Report Windows first-apply leakage
-        if: runner.os == 'Windows'
+        if: always() && runner.os == 'Windows'
         shell: pwsh
         run: |
           $auditScript = Join-Path $env:RUNNER_TEMP 'windows-leakage-audit.ps1'
@@ -335,18 +335,34 @@ jobs:
             start `
             -StateRoot $secondAuditState
 
-          $secondApply = chezmoi --source $env:GITHUB_WORKSPACE apply --no-tty
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $secondApply
+          $secondApply = @()
+          $secondApplyExitCode = 0
+          $secondApplyError = $null
+          $auditError = $null
+          try {
+            $secondApply = chezmoi --source $env:GITHUB_WORKSPACE apply --no-tty
+            $secondApplyExitCode = $LASTEXITCODE
+          } catch {
+            $secondApplyError = $_
+          } finally {
+            try {
+              & $auditScript `
+                stop `
+                -StateRoot $secondAuditState
+              & $auditScript `
+                report `
+                -StateRoot $secondAuditState
+              & .github/scripts/verify-windows-containment.ps1 `
+                -StateRoot $secondAuditState
+            } catch {
+              $auditError = $_
+            }
+          }
 
-          & $auditScript `
-            stop `
-            -StateRoot $secondAuditState
-          & $auditScript `
-            report `
-            -StateRoot $secondAuditState
-          & .github/scripts/verify-windows-containment.ps1 `
-            -StateRoot $secondAuditState
+          $secondApply
+          if ($null -ne $secondApplyError) { throw $secondApplyError }
+          if ($secondApplyExitCode -ne 0) { exit $secondApplyExitCode }
+          if ($null -ne $auditError) { throw $auditError }
 
           if (@($secondApply | Select-String -SimpleMatch 'already installed').Count -ne 2) {
             throw 'Second apply reinstalled a managed font'
