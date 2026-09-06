@@ -732,37 +732,45 @@ switch ($Command) {
                 $sessionConfigPath
         }
 
-        $metadata = [ordered]@{
-            schemaVersion = 1
-            sessionId = $sessionId
-            status = 'running'
-            startedAtUtc = [DateTime]::UtcNow.ToString('o')
-            stoppedAtUtc = $null
-            canonicalHome = $canonicalHomePath
-            quarantineRoot = $quarantineRoot
-            hostProfileRoot = $hostProfilePath
-            managedBridgeRoots = @(Get-ManagedBridgeRoots $hostProfilePath)
-            stateRoot = $auditStateRoot
-            sessionDirectory = $sessionDirectory
-            procmon = [ordered]@{
+        $cleanupMetadata = [pscustomobject]@{
+            procmon = [pscustomobject]@{
                 mode = $procmon.mode
-                reason = $procmon.reason
                 executable = $executable
-                configPath = if (Test-Path -LiteralPath $sessionConfigPath) { $sessionConfigPath } else { $null }
                 owned = $procmon.owned
                 pid = if ($procmon.PSObject.Properties.Name -contains 'pid') { $procmon.pid } else { $null }
-                pmlPath = Join-Path $sessionDirectory 'procmon.pml'
-                csvPath = Join-Path $sessionDirectory 'procmon.csv'
             }
-            warnings = @()
         }
         try {
+            $metadata = [ordered]@{
+                schemaVersion = 1
+                sessionId = $sessionId
+                status = 'running'
+                startedAtUtc = [DateTime]::UtcNow.ToString('o')
+                stoppedAtUtc = $null
+                canonicalHome = $canonicalHomePath
+                quarantineRoot = $quarantineRoot
+                hostProfileRoot = $hostProfilePath
+                managedBridgeRoots = @(Get-ManagedBridgeRoots $hostProfilePath)
+                stateRoot = $auditStateRoot
+                sessionDirectory = $sessionDirectory
+                procmon = [ordered]@{
+                    mode = $procmon.mode
+                    reason = $procmon.reason
+                    executable = $executable
+                    configPath = if (Test-Path -LiteralPath $sessionConfigPath) { $sessionConfigPath } else { $null }
+                    owned = $procmon.owned
+                    pid = if ($procmon.PSObject.Properties.Name -contains 'pid') { $procmon.pid } else { $null }
+                    pmlPath = Join-Path $sessionDirectory 'procmon.pml'
+                    csvPath = Join-Path $sessionDirectory 'procmon.csv'
+                }
+                warnings = @()
+            }
             Write-JsonFile $metadata (Join-Path $sessionDirectory 'metadata.json')
             Write-JsonFile @{ status = 'running'; sessionDirectory = $sessionDirectory } $activePath
         } catch {
             $initializationError = $_
             try {
-                $warning = Stop-ProcMonCapture ([pscustomobject]$metadata)
+                $warning = Stop-ProcMonCapture $cleanupMetadata
                 if ($warning) { Write-Warning $warning }
             } catch {
                 Write-Warning "ProcMon cleanup failed after audit initialization failed: $_"
