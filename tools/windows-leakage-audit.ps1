@@ -6,16 +6,17 @@ Captures a temporary Windows/MSYS2 runtime leakage audit session.
 Use start before normal CLI work, stop afterward, and report to regenerate the
 human-readable summary. ProcMon attribution is enabled only when ProcMon is
 available, its EULA was already accepted, no existing session is running, and
--ProcMonConfig names an audit-specific PMC with destructive path/write filters.
+an audit-specific PMC has valid destructive path/write filters.
 
 .PARAMETER ProcMonConfig
 An exported ProcMon configuration with Drop Filtered Events enabled. It must
 include Path/Begins with rules for the displayed quarantine and host roots and
 Operation/Is rules for the write operations validated by this script. Create it
 in the ProcMon UI and export it without replacing your normal configuration.
+The default is XDG_CONFIG_HOME/dotfiles-audit/procmon.pmc.
 
 .EXAMPLE
-./tools/windows-leakage-audit.ps1 start -ProcMonConfig C:\audit\leakage.pmc
+./tools/windows-leakage-audit.ps1 start
 
 .EXAMPLE
 ./tools/windows-leakage-audit.ps1 stop
@@ -34,7 +35,9 @@ param(
     [string] $HostProfile,
     [string] $StateRoot,
     [string] $ProcMonPath,
+    [Alias('procmon-config')]
     [string] $ProcMonConfig,
+    [Alias('snapshot-only')]
     [switch] $SnapshotOnly
 )
 
@@ -52,12 +55,18 @@ function Resolve-FullPath {
     return $fullPath.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
 }
 
+function Test-WindowsAbsolutePath {
+    param([string] $Path)
+
+    return $Path -match '^(?:[A-Za-z]:[\\/]|\\\\)'
+}
+
 function Resolve-CanonicalHome {
     if ($CanonicalHome) {
         return Resolve-FullPath $CanonicalHome
     }
 
-    if ($env:HOME -and [IO.Path]::IsPathFullyQualified($env:HOME)) {
+    if ($env:HOME -and (Test-WindowsAbsolutePath $env:HOME)) {
         return Resolve-FullPath $env:HOME
     }
 
@@ -91,11 +100,22 @@ function Resolve-StateRoot {
         return Resolve-FullPath $StateRoot
     }
 
-    if ($env:XDG_STATE_HOME -and [IO.Path]::IsPathFullyQualified($env:XDG_STATE_HOME)) {
+    if ($env:XDG_STATE_HOME -and (Test-WindowsAbsolutePath $env:XDG_STATE_HOME)) {
         return Resolve-FullPath (Join-Path $env:XDG_STATE_HOME 'dotfiles-leakage-audit')
     }
 
     return Resolve-FullPath (Join-Path $HomePath '.local\state\dotfiles-leakage-audit')
+}
+
+function Resolve-DefaultProcMonConfig {
+    param([Parameter(Mandatory)][string] $HomePath)
+
+    $configRoot = if ($env:XDG_CONFIG_HOME -and (Test-WindowsAbsolutePath $env:XDG_CONFIG_HOME)) {
+        Resolve-FullPath $env:XDG_CONFIG_HOME
+    } else {
+        Resolve-FullPath (Join-Path $HomePath '.config')
+    }
+    return Join-Path $configRoot 'dotfiles-audit\procmon.pmc'
 }
 
 function Write-JsonFile {
@@ -243,11 +263,18 @@ function Compare-Snapshots {
 }
 
 function Find-ProcMon {
+    param([Parameter(Mandatory)][string] $HomePath)
+
     if ($ProcMonPath) {
         if (-not (Test-Path -LiteralPath $ProcMonPath -PathType Leaf)) {
             throw "ProcMon executable not found: $ProcMonPath"
         }
         return Resolve-FullPath $ProcMonPath
+    }
+
+    $managed = Join-Path $HomePath '.local\share\dotfiles-audit\procmon\Procmon64.exe'
+    if (Test-Path -LiteralPath $managed -PathType Leaf) {
+        return Resolve-FullPath $managed
     }
 
     foreach ($name in 'procmon64.exe', 'procmon.exe', 'procmon64a.exe') {
@@ -409,10 +436,10 @@ function Start-ProcMonCapture {
     )
 
     if ((Get-ProcMonProcesses).Count -ne 0) {
-        return [pscustomobject]@{ mode = 'snapshot-only'; reason = 'An existing ProcMon session is running.'; owned = $false }
+        throw 'Another ProcMon session is already running. Stop it before starting the audit.'
     }
     if (-not (Test-ProcMonEulaAccepted)) {
-        return [pscustomobject]@{ mode = 'snapshot-only'; reason = 'ProcMon EULA has not been accepted manually.'; owned = $false }
+        throw 'ProcMon is installed but the EULA has not been accepted. Launch ProcMon once and accept the EULA, then retry.'
     }
 
     Start-Process -FilePath $Executable `
@@ -424,7 +451,7 @@ function Start-ProcMonCapture {
         $process = Get-ProcMonProcesses | Select-Object -First 1
     }
     if (-not $process) {
-        return [pscustomobject]@{ mode = 'snapshot-only'; reason = 'ProcMon did not remain running.'; owned = $false }
+        throw 'ProcMon did not remain running.'
     }
 
     return [pscustomobject]@{ mode = 'capture'; reason = $null; owned = $true; pid = $process.Id }
@@ -658,7 +685,7 @@ function Resolve-SessionDirectory {
     )
 
     $sessionDirectory = if ($Session) {
-        $candidate = if ([IO.Path]::IsPathFullyQualified($Session)) { $Session } else { Join-Path $AuditStateRoot $Session }
+        $candidate = if (Test-WindowsAbsolutePath $Session) { $Session } else { Join-Path $AuditStateRoot $Session }
         Resolve-FullPath $candidate
     } else {
         $activePath = Join-Path $AuditStateRoot 'active.json'
@@ -709,20 +736,19 @@ switch ($Command) {
         New-Item -ItemType Directory -Path $sessionDirectory | Out-Null
         New-Snapshot $quarantineRoot (Join-Path $sessionDirectory 'before.json') | Out-Null
 
-        $executable = if ($SnapshotOnly) { $null } else { Find-ProcMon }
+        $executable = if ($SnapshotOnly) { $null } else { Find-ProcMon $canonicalHomePath }
         $sessionConfigPath = Join-Path $sessionDirectory 'procmon.pmc'
-        $procmon = if (-not $executable) {
-            [pscustomobject]@{ mode = 'snapshot-only'; reason = 'ProcMon unavailable.'; owned = $false }
-        } elseif (-not $ProcMonConfig) {
-            [pscustomobject]@{
-                mode = 'snapshot-only'
-                reason = 'ProcMon capture requires -ProcMonConfig with destructive audit filters.'
-                owned = $false
-            }
+        $procmon = if ($SnapshotOnly) {
+            [pscustomobject]@{ mode = 'snapshot-only'; reason = 'Explicitly requested.'; owned = $false }
         } else {
-            $sourceConfigPath = Resolve-FullPath $ProcMonConfig
+            if (-not $executable) {
+                throw 'ProcMon is not installed. Apply the dotfiles provisioning or use audit start --snapshot-only.'
+            }
+            $sourceConfigPath = Resolve-FullPath $(
+                if ($ProcMonConfig) { $ProcMonConfig } else { Resolve-DefaultProcMonConfig $canonicalHomePath }
+            )
             if (-not (Test-Path -LiteralPath $sourceConfigPath -PathType Leaf)) {
-                throw "ProcMon configuration not found: $sourceConfigPath"
+                throw "ProcMon audit configuration not found: $sourceConfigPath"
             }
             Test-ProcMonConfig $sourceConfigPath @($quarantineRoot, $hostProfilePath)
             Copy-Item -LiteralPath $sourceConfigPath -Destination $sessionConfigPath

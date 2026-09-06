@@ -160,3 +160,51 @@ start WezTerm.
 
 The managed configuration launches UCRT64 Fish and keeps the Windows and
 MSYS2 homes isolated except for the selected bridges.
+
+## 6. Prepare the Runtime Leakage Audit
+
+The apply installs the pinned Microsoft Sysinternals Process Monitor binary,
+but does not accept its EULA. Launch it once and accept the EULA explicitly:
+
+```fish
+"$XDG_DATA_HOME/dotfiles-audit/procmon/Procmon64.exe"
+```
+
+In Process Monitor, create an audit-only configuration with **Drop Filtered
+Events** enabled and exactly these filters:
+
+```text
+Path begins with C:\msys64\home\<username>\.winprofile  Include
+Path begins with C:\Users\<username>                       Include
+
+Operation is CreateFile                         Include
+Operation is WriteFile                          Include
+Operation is SetEndOfFileInformationFile        Include
+Operation is SetRenameInformationFile           Include
+Operation is SetDispositionInformationFile      Include
+Operation is SetBasicInformationFile            Include
+```
+
+Remove every other filter rule, then export the configuration to:
+
+```text
+C:\msys64\home\<username>\.config\dotfiles-audit\procmon.pmc
+```
+
+Create the parent directory from Fish when needed:
+
+```fish
+mkdir -p "$XDG_CONFIG_HOME/dotfiles-audit"
+```
+
+The normal audit workflow is:
+
+```fish
+audit start
+# Use CLI tools normally.
+audit stop
+audit report
+```
+
+Use `audit start --snapshot-only` only when process attribution and host-profile
+write detection are not required.
