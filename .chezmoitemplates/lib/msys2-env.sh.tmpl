@@ -1,6 +1,13 @@
 {{- if eq .chezmoi.os "windows" }}
 export APPDATA="$HOME/.winprofile/AppData/Roaming"
 export LOCALAPPDATA="$HOME/.winprofile/AppData/Local"
+export MISE_CONFIG_DIR="$XDG_CONFIG_HOME/mise"
+export MISE_DATA_DIR="$XDG_DATA_HOME/mise"
+export MISE_STATE_DIR="$XDG_STATE_HOME/mise"
+export MISE_CACHE_DIR="$XDG_CACHE_HOME/mise"
+export MISE_TMP_DIR="$XDG_CACHE_HOME/mise/tmp"
+export AUBE_CACHE_DIR="$XDG_CACHE_HOME/aube"
+export AUBE_STORE_DIR="$XDG_DATA_HOME/aube/store"
 export UV_CACHE_DIR="$XDG_CACHE_HOME/uv"
 export UV_TOOL_DIR="$XDG_DATA_HOME/uv/tools"
 export UV_PYTHON_INSTALL_DIR="$XDG_DATA_HOME/uv/python"
