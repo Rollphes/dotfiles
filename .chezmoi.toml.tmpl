@@ -5,6 +5,6 @@ destDir = "C:/msys64/home/{{ env "USERNAME" }}"
 command = "C:/msys64/usr/bin/sh.exe"
 
 [cd]
-command = "C:/msys64/usr/bin/fish.exe"
-args = ["--login"]
+command = "C:/msys64/usr/bin/env.exe"
+args = ["MSYSTEM=UCRT64", "C:/msys64/usr/bin/fish.exe", "--login", "-i"]
 {{- end }}
