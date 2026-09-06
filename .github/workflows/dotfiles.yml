@@ -203,13 +203,13 @@ jobs:
           }
 
           $fishEnvironment = @(& 'C:\msys64\usr\bin\fish.exe' -c @'
-          printf '%s\n' "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$APPDATA" "$LOCALAPPDATA" "$UV_CACHE_DIR" "$UV_TOOL_DIR" "$UV_PYTHON_INSTALL_DIR"
+          printf '%s\n' "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$APPDATA" "$LOCALAPPDATA" "$UV_CACHE_DIR" "$UV_TOOL_DIR" "$UV_PYTHON_INSTALL_DIR" "$_ZO_DATA_DIR"
           '@
           )
           $emptyEnvironment = @(
             $fishEnvironment | Where-Object { [string]::IsNullOrWhiteSpace($_) }
           )
-          if ($fishEnvironment.Count -ne 9 -or $emptyEnvironment.Count -ne 0) {
+          if ($fishEnvironment.Count -ne 10 -or $emptyEnvironment.Count -ne 0) {
             throw "Unexpected Fish environment output: $($fishEnvironment.Count) values"
           }
           $expectedEnvironment = @(
@@ -221,7 +221,8 @@ jobs:
             "$env:HOME\.winprofile\AppData\Local",
             "$env:HOME\.cache\uv",
             "$env:HOME\.local\share\uv\tools",
-            "$env:HOME\.local\share\uv\python"
+            "$env:HOME\.local\share\uv\python",
+            "$env:HOME\.local\share\zoxide"
           ) | ForEach-Object { [IO.Path]::GetFullPath($_) }
           $actualEnvironment = $fishEnvironment | ForEach-Object {
             [IO.Path]::GetFullPath(
