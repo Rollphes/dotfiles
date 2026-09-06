@@ -13,6 +13,15 @@ function __pj_list_projects
         set -a projects (ghq list --full-path 2>/dev/null)
     end
 
+    if command -q zoxide
+        for directory in (zoxide query --list 2>/dev/null)
+            set -l repository (git -C "$directory" rev-parse --show-toplevel 2>/dev/null)
+            if test -n "$repository"
+                set -a projects "$repository"
+            end
+        end
+    end
+
     if command -q fd
         for root in $exception_roots
             if not test -d "$root"
@@ -67,12 +76,28 @@ function pj
         return 0
     end
 
-    set -l selected (printf '%s\n' $projects | fzf \
+    set -l choices
+    for project in $projects
+        set -l name (path basename "$project")
+        set -l owner (path basename (path dirname "$project"))
+        set -a choices "$owner/$name\t$project"
+    end
+
+    set -l preview_shell (command -s sh)
+    if set -q MSYSTEM
+        set preview_shell (cygpath -w "$preview_shell")
+    end
+
+    set -l selected (printf '%b\n' $choices | fzf \
         --height=80% \
         --layout=reverse \
         --border \
+        --delimiter='\t' \
+        --with-nth=1 \
+        --accept-nth=2 \
         --prompt='Project> ' \
-        --preview='git -C {} status --short --branch 2>/dev/null || true' \
+        --with-shell="$preview_shell -c" \
+        --preview='LC_ALL=C.UTF-8 git -c core.quotepath=false -C {2} status --short --branch 2>/dev/null || true' \
         --preview-window='right,60%')
 
     if test $status -ne 0 -o -z "$selected"
