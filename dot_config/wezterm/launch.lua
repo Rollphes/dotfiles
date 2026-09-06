@@ -29,6 +29,7 @@ local function windows_native_tool_environment()
     MISE_TMP_DIR = paths.cache .. '\\mise\\tmp',
     AUBE_CACHE_DIR = paths.cache .. '\\aube',
     AUBE_STORE_DIR = paths.data .. '\\aube\\store',
+    ATUIN_CONFIG_DIR = paths.config .. '\\atuin',
   }
 end
 

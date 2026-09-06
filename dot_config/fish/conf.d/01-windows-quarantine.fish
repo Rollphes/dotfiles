@@ -14,6 +14,7 @@ set -gx MISE_TMP_DIR "$XDG_CACHE_HOME/mise/tmp"
 # mise embeds aube for npm tools.
 set -gx AUBE_CACHE_DIR "$XDG_CACHE_HOME/aube"
 set -gx AUBE_STORE_DIR "$XDG_DATA_HOME/aube/store"
+set -gx ATUIN_CONFIG_DIR "$XDG_CONFIG_HOME/atuin"
 
 # uv follows Windows profile directories instead of XDG directories on Windows.
 set -gx UV_CACHE_DIR "$XDG_CACHE_HOME/uv"

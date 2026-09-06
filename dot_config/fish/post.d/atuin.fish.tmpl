@@ -2,9 +2,7 @@ if not command -q atuin
     return
 end
 
-{{ if eq .chezmoi.os "windows" -}}
-set -gx ATUIN_CONFIG_DIR "{{ .chezmoi.homeDir }}/.config/atuin"
-{{ else -}}
+{{ if ne .chezmoi.os "windows" -}}
 set -gx ATUIN_CONFIG_DIR "$XDG_CONFIG_HOME/atuin"
 {{ end -}}
 
