@@ -1,0 +1,430 @@
+<#
+.SYNOPSIS
+Compares Windows runtime state before and after an interactive or apply session.
+
+.DESCRIPTION
+Start records filesystem snapshots, stop records and compares the final state,
+and report regenerates the human-readable report from the stored diff. No
+background process remains active between start and stop.
+#>
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory, Position = 0)]
+    [ValidateSet('start', 'stop', 'report')]
+    [string] $Command,
+    [string] $Session,
+    [string] $CanonicalHome,
+    [string] $HostProfile,
+    [string] $StateRoot
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+$DefaultManagedBridgePaths = @(
+{{ range .windows.bridges -}}
+    '{{ .path }}'
+{{ end -}}
+)
+
+function Resolve-FullPath {
+    param([Parameter(Mandatory)][string] $Path)
+    $fullPath = [IO.Path]::GetFullPath($Path)
+    $root = [IO.Path]::GetPathRoot($fullPath)
+    if ($fullPath.Equals($root, [StringComparison]::OrdinalIgnoreCase)) { return $root }
+    return $fullPath.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+}
+
+function Test-WindowsAbsolutePath {
+    param([string] $Path)
+    return $Path -match '^(?:[A-Za-z]:[\\/]|\\\\)'
+}
+
+function Test-PathWithin {
+    param([Parameter(Mandatory)][string] $Path, [Parameter(Mandatory)][string] $Root)
+    $candidate = Resolve-FullPath $Path
+    $rootPath = Resolve-FullPath $Root
+    return $candidate.Equals($rootPath, [StringComparison]::OrdinalIgnoreCase) -or
+        $candidate.StartsWith("$rootPath\", [StringComparison]::OrdinalIgnoreCase)
+}
+
+function Resolve-CanonicalHome {
+    if ($CanonicalHome) { return Resolve-FullPath $CanonicalHome }
+    if ($env:HOME -and (Test-WindowsAbsolutePath $env:HOME)) { return Resolve-FullPath $env:HOME }
+    if (-not $env:USERNAME) { throw 'Cannot derive the MSYS2 canonical home: USERNAME is unset.' }
+    return Resolve-FullPath (Join-Path 'C:\msys64\home' $env:USERNAME)
+}
+
+function Resolve-HostProfile {
+    if ($HostProfile) { return Resolve-FullPath $HostProfile }
+    $profile = [Environment]::GetFolderPath('UserProfile')
+    if (-not $profile) { $profile = $env:USERPROFILE }
+    if (-not $profile) { throw 'Cannot derive the Windows host profile.' }
+    return Resolve-FullPath $profile
+}
+
+function Resolve-StateRoot {
+    param([Parameter(Mandatory)][string] $HomePath)
+    if ($StateRoot) { return Resolve-FullPath $StateRoot }
+    if ($env:XDG_STATE_HOME -and (Test-WindowsAbsolutePath $env:XDG_STATE_HOME)) {
+        return Resolve-FullPath (Join-Path $env:XDG_STATE_HOME 'dotfiles-leakage-audit')
+    }
+    return Resolve-FullPath (Join-Path $HomePath '.local\state\dotfiles-leakage-audit')
+}
+
+function Write-JsonFile {
+    param([Parameter(Mandatory)] $Value, [Parameter(Mandatory)][string] $Path)
+    $Value | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $Path -Encoding utf8
+}
+
+function Read-JsonFile {
+    param([Parameter(Mandatory)][string] $Path)
+    return Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+}
+
+function Resolve-SessionDirectory {
+    param([Parameter(Mandatory)][string] $AuditStateRoot, [switch] $RequireActive)
+    $sessionDirectory = if ($Session) {
+        $candidate = if (Test-WindowsAbsolutePath $Session) { $Session } else { Join-Path $AuditStateRoot $Session }
+        Resolve-FullPath $candidate
+    } else {
+        $activePath = Join-Path $AuditStateRoot 'active.json'
+        if (Test-Path -LiteralPath $activePath) {
+            (Read-JsonFile $activePath).sessionDirectory
+        } else {
+            if ($RequireActive) { throw 'No active audit session was found.' }
+            $latest = Get-ChildItem -LiteralPath $AuditStateRoot -Directory -ErrorAction SilentlyContinue |
+                Sort-Object Name -Descending | Select-Object -First 1
+            if (-not $latest) { throw 'No audit session was found.' }
+            $latest.FullName
+        }
+    }
+    $resolved = Resolve-FullPath $sessionDirectory
+    $stateRootPath = Resolve-FullPath $AuditStateRoot
+    if ($resolved.Equals($stateRootPath, [StringComparison]::OrdinalIgnoreCase) -or
+        -not (Test-PathWithin $resolved $stateRootPath)) {
+        throw "Audit session must remain below the audit state root: $resolved"
+    }
+    return $resolved
+}
+
+if (-not ('AuditSnapshotWriter' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Security.Cryptography;
+using System.Text;
+
+public static class AuditSnapshotWriter
+{
+    private const string Header = "\"path\",\"type\",\"size\",\"lastWriteTimeUtc\",\"sha256\",\"linkTarget\"";
+
+    public static void WriteRecursive(string root, string output, bool hashFiles, string[] excludedRoots)
+    {
+        using (var writer = NewWriter(output))
+        {
+            if (Directory.Exists(root))
+                WriteTree(writer, root, root, "", hashFiles, excludedRoots ?? Array.Empty<string>());
+        }
+    }
+
+    public static void WriteShallow(string root, string output)
+    {
+        using (var writer = NewWriter(output))
+        {
+            if (!Directory.Exists(root)) return;
+            foreach (var path in Directory.EnumerateFileSystemEntries(root))
+                WriteEntry(writer, path, Path.GetFileName(path), false);
+        }
+    }
+
+    public static void WriteDotRoots(string profileRoot, string output, string[] excludedRoots)
+    {
+        using (var writer = NewWriter(output))
+        {
+            if (!Directory.Exists(profileRoot)) return;
+            var exclusions = excludedRoots ?? Array.Empty<string>();
+            foreach (var path in Directory.EnumerateFileSystemEntries(profileRoot))
+            {
+                var name = Path.GetFileName(path);
+                if (!name.StartsWith(".", StringComparison.Ordinal) || IsExcluded(path, exclusions)) continue;
+                var attributes = File.GetAttributes(path);
+                WriteEntry(writer, path, name, false);
+                if ((attributes & FileAttributes.Directory) != 0 &&
+                    (attributes & FileAttributes.ReparsePoint) == 0)
+                    WriteTree(writer, path, path, name, false, exclusions);
+            }
+        }
+    }
+
+    private static StreamWriter NewWriter(string output)
+    {
+        var writer = new StreamWriter(output, false, new UTF8Encoding(false));
+        writer.WriteLine(Header);
+        return writer;
+    }
+
+    private static void WriteTree(StreamWriter writer, string root, string start, string relativeBase, bool hashFiles, string[] exclusions)
+    {
+        var pending = new Stack<string>();
+        pending.Push(start);
+        while (pending.Count > 0)
+        {
+            var directory = pending.Pop();
+            foreach (var path in Directory.EnumerateFileSystemEntries(directory))
+            {
+                if (IsExcluded(path, exclusions)) continue;
+                var attributes = File.GetAttributes(path);
+                var relative = Path.GetRelativePath(root, path);
+                if (!String.IsNullOrEmpty(relativeBase)) relative = Path.Combine(relativeBase, relative);
+                WriteEntry(writer, path, relative, hashFiles);
+                if ((attributes & FileAttributes.Directory) != 0 &&
+                    (attributes & FileAttributes.ReparsePoint) == 0)
+                    pending.Push(path);
+            }
+        }
+    }
+
+    private static void WriteEntry(StreamWriter writer, string path, string relative, bool hashFiles)
+    {
+        var info = (File.GetAttributes(path) & FileAttributes.Directory) != 0
+            ? (FileSystemInfo)new DirectoryInfo(path)
+            : new FileInfo(path);
+        var reparse = (info.Attributes & FileAttributes.ReparsePoint) != 0;
+        var type = reparse ? "reparsePoint" : info is DirectoryInfo ? "directory" : "file";
+        var size = info is FileInfo file ? file.Length.ToString(CultureInfo.InvariantCulture) : "";
+        var hash = hashFiles && info is FileInfo ? Hash(path) : "";
+        var target = reparse ? info.LinkTarget ?? "" : "";
+        writer.WriteLine(String.Join(",", new[] {
+            Csv(relative.Replace('\\', '/').TrimStart('/')),
+            Csv(type),
+            Csv(size),
+            Csv(info.LastWriteTimeUtc.ToString("o", CultureInfo.InvariantCulture)),
+            Csv(hash),
+            Csv(target.Replace('\\', '/'))
+        }));
+    }
+
+    private static string Hash(string path)
+    {
+        using (var stream = File.OpenRead(path))
+        using (var sha = SHA256.Create())
+            return BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", "").ToLowerInvariant();
+    }
+
+    private static bool IsExcluded(string path, string[] roots)
+    {
+        var candidate = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        foreach (var root in roots)
+        {
+            var expected = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (candidate.Equals(expected, StringComparison.OrdinalIgnoreCase) ||
+                candidate.StartsWith(expected + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
+    private static string Csv(string value)
+    {
+        return "\"" + (value ?? "").Replace("\"", "\"\"") + "\"";
+    }
+}
+'@
+}
+
+function New-SnapshotSet {
+    param([Parameter(Mandatory)] $Metadata, [Parameter(Mandatory)][string] $Directory)
+    New-Item -ItemType Directory -Path $Directory -Force | Out-Null
+    [AuditSnapshotWriter]::WriteRecursive(
+        $Metadata.roots.quarantine,
+        (Join-Path $Directory 'quarantine.csv'),
+        $true,
+        @()
+    )
+    [AuditSnapshotWriter]::WriteShallow($Metadata.roots.local, (Join-Path $Directory 'local.csv'))
+    [AuditSnapshotWriter]::WriteShallow($Metadata.roots.roaming, (Join-Path $Directory 'roaming.csv'))
+    [AuditSnapshotWriter]::WriteShallow($Metadata.roots.temp, (Join-Path $Directory 'temp.csv'))
+    [AuditSnapshotWriter]::WriteDotRoots(
+        $Metadata.roots.hostProfile,
+        (Join-Path $Directory 'profileDotRoots.csv'),
+        @($Metadata.managedBridgeRoots)
+    )
+}
+
+function Compare-Snapshot {
+    param([Parameter(Mandatory)] $Before, [Parameter(Mandatory)] $After)
+    $beforeByPath = @{}
+    foreach ($entry in @($Before.entries)) { $beforeByPath[$entry.path.ToLowerInvariant()] = $entry }
+    $afterByPath = @{}
+    foreach ($entry in @($After.entries)) { $afterByPath[$entry.path.ToLowerInvariant()] = $entry }
+    $new = [Collections.Generic.List[object]]::new()
+    $modified = [Collections.Generic.List[object]]::new()
+    $deleted = [Collections.Generic.List[object]]::new()
+    $metadataOnly = [Collections.Generic.List[object]]::new()
+    foreach ($key in @($afterByPath.Keys)) {
+        $current = $afterByPath[$key]
+        if (-not $beforeByPath.ContainsKey($key)) { $new.Add($current); continue }
+        $previous = $beforeByPath[$key]
+        $contentChanged = $previous.type -cne $current.type -or
+            $previous.size -ne $current.size -or
+            $previous.linkTarget -cne $current.linkTarget -or
+            ($previous.sha256 -and $current.sha256 -and $previous.sha256 -cne $current.sha256)
+        if ($contentChanged) {
+            $modified.Add([pscustomobject]@{ path = $current.path; before = $previous; after = $current })
+        } elseif ($previous.lastWriteTimeUtc -cne $current.lastWriteTimeUtc) {
+            $metadataOnly.Add([pscustomobject]@{ path = $current.path; before = $previous; after = $current })
+        }
+    }
+    foreach ($key in @($beforeByPath.Keys)) {
+        if (-not $afterByPath.ContainsKey($key)) { $deleted.Add($beforeByPath[$key]) }
+    }
+    return [ordered]@{
+        new = @($new | Sort-Object path)
+        modified = @($modified | Sort-Object path)
+        deleted = @($deleted | Sort-Object path)
+        metadataOnly = @($metadataOnly | Sort-Object path)
+    }
+}
+
+function New-DiffSet {
+    param([Parameter(Mandatory)][string] $SessionDirectory)
+    $diffDirectory = Join-Path $SessionDirectory 'diff'
+    New-Item -ItemType Directory -Path $diffDirectory -Force | Out-Null
+    $diffs = [ordered]@{}
+    foreach ($id in 'quarantine', 'local', 'roaming', 'temp', 'profileDotRoots') {
+        $before = [pscustomobject]@{
+            entries = @(Import-Csv -LiteralPath (Join-Path $SessionDirectory "before\$id.csv"))
+        }
+        $after = [pscustomobject]@{
+            entries = @(Import-Csv -LiteralPath (Join-Path $SessionDirectory "after\$id.csv"))
+        }
+        $diff = Compare-Snapshot $before $after
+        Write-JsonFile $diff (Join-Path $diffDirectory "$id.json")
+        $diffs[$id] = $diff
+    }
+    return $diffs
+}
+
+function Add-DiffSection {
+    param([Parameter(Mandatory)] $Lines, [Parameter(Mandatory)][string] $Title, [Parameter(Mandatory)] $Diff)
+    $Lines.Add($Title)
+    foreach ($status in 'new', 'modified', 'deleted', 'metadataOnly') {
+        $values = @($Diff.$status)
+        $label = if ($status -eq 'metadataOnly') { 'METADATA ONLY' } else { $status.ToUpperInvariant() }
+        $Lines.Add("  ${label}: $($values.Count)")
+        foreach ($value in $values) { $Lines.Add("    $($value.path)") }
+    }
+    $Lines.Add('')
+}
+
+function New-Report {
+    param([Parameter(Mandatory)] $Metadata, [Parameter(Mandatory)] $Diffs)
+    $lines = [Collections.Generic.List[string]]::new()
+    $lines.Add("Windows runtime leakage audit: $($Metadata.sessionId)")
+    $lines.Add("Started: $($Metadata.startedAtUtc)")
+    $lines.Add("Stopped: $($Metadata.stoppedAtUtc)")
+    $lines.Add('')
+    Add-DiffSection $lines 'QUARANTINE WRITE' $Diffs.quarantine
+    Add-DiffSection $lines 'HOST LOCAL LEAKAGE CANDIDATE' $Diffs.local
+    Add-DiffSection $lines 'HOST ROAMING LEAKAGE CANDIDATE' $Diffs.roaming
+    Add-DiffSection $lines 'HOST TEMP USAGE' $Diffs.temp
+    Add-DiffSection $lines 'HOST PROFILE DOTROOT LEAKAGE CANDIDATE' $Diffs.profileDotRoots
+    $lines.Add('MANAGED BRIDGE')
+    $lines.Add('  Excluded from host-profile leakage candidates:')
+    foreach ($path in @($Metadata.managedBridgeRoots)) { $lines.Add("    $path") }
+    $reportPath = Join-Path $Metadata.sessionDirectory 'report.txt'
+    $lines | Set-Content -LiteralPath $reportPath -Encoding utf8
+    return $reportPath
+}
+
+function Read-DiffSet {
+    param([Parameter(Mandatory)][string] $SessionDirectory)
+    $diffs = [ordered]@{}
+    foreach ($id in 'quarantine', 'local', 'roaming', 'temp', 'profileDotRoots') {
+        $diffs[$id] = Read-JsonFile (Join-Path $SessionDirectory "diff\$id.json")
+    }
+    return $diffs
+}
+
+$canonicalHomePath = Resolve-CanonicalHome
+$hostProfilePath = Resolve-HostProfile
+$auditStateRoot = Resolve-StateRoot $canonicalHomePath
+$quarantineRoot = Join-Path $canonicalHomePath '.winprofile'
+if (-not (Test-PathWithin $auditStateRoot $canonicalHomePath) -or
+    (Test-PathWithin $auditStateRoot $quarantineRoot) -or
+    (Test-PathWithin $auditStateRoot $hostProfilePath)) {
+    throw "Audit state must remain in the canonical home outside .winprofile: $auditStateRoot"
+}
+
+switch ($Command) {
+    'start' {
+        New-Item -ItemType Directory -Path $auditStateRoot -Force | Out-Null
+        $activePath = Join-Path $auditStateRoot 'active.json'
+        if (Test-Path -LiteralPath $activePath) {
+            $active = Read-JsonFile $activePath
+            if ($active.status -eq 'running') { throw "Audit session is already running: $($active.sessionDirectory)" }
+        }
+        $sessionId = [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ')
+        $sessionDirectory = Join-Path $auditStateRoot $sessionId
+        New-Item -ItemType Directory -Path $sessionDirectory | Out-Null
+        try {
+            $metadata = [ordered]@{
+                schemaVersion = 2
+                sessionId = $sessionId
+                status = 'starting'
+                startedAtUtc = [DateTime]::UtcNow.ToString('o')
+                stoppedAtUtc = $null
+                sessionDirectory = $sessionDirectory
+                roots = [ordered]@{
+                    canonicalHome = $canonicalHomePath
+                    quarantine = $quarantineRoot
+                    hostProfile = $hostProfilePath
+                    local = Join-Path $hostProfilePath 'AppData\Local'
+                    roaming = Join-Path $hostProfilePath 'AppData\Roaming'
+                    temp = Join-Path $hostProfilePath 'AppData\Local\Temp'
+                }
+                environment = [ordered]@{
+                    HOME = $env:HOME; USERPROFILE = $env:USERPROFILE; APPDATA = $env:APPDATA
+                    LOCALAPPDATA = $env:LOCALAPPDATA; TEMP = $env:TEMP; TMP = $env:TMP
+                    XDG_CONFIG_HOME = $env:XDG_CONFIG_HOME; XDG_DATA_HOME = $env:XDG_DATA_HOME
+                    XDG_STATE_HOME = $env:XDG_STATE_HOME; XDG_CACHE_HOME = $env:XDG_CACHE_HOME
+                }
+                managedBridgeRoots = @($DefaultManagedBridgePaths | ForEach-Object {
+                    Resolve-FullPath (Join-Path $hostProfilePath ($_ -replace '/', '\'))
+                })
+            }
+            New-SnapshotSet $metadata (Join-Path $sessionDirectory 'before')
+            $metadata.status = 'running'
+            Write-JsonFile $metadata (Join-Path $sessionDirectory 'metadata.json')
+            Write-JsonFile @{ status = 'running'; sessionDirectory = $sessionDirectory } $activePath
+        } catch {
+            Write-JsonFile @{ status = 'start-failed'; sessionDirectory = $sessionDirectory } $activePath
+            throw
+        }
+        Write-Output "Audit started: $sessionDirectory"
+    }
+    'stop' {
+        $sessionDirectory = Resolve-SessionDirectory $auditStateRoot -RequireActive
+        $metadataPath = Join-Path $sessionDirectory 'metadata.json'
+        $metadata = Read-JsonFile $metadataPath
+        if ($metadata.status -ne 'running') { throw "Audit session is not running: $sessionDirectory" }
+        New-SnapshotSet $metadata (Join-Path $sessionDirectory 'after')
+        $diffs = New-DiffSet $sessionDirectory
+        $metadata.status = 'stopped'
+        $metadata.stoppedAtUtc = [DateTime]::UtcNow.ToString('o')
+        Write-JsonFile $metadata $metadataPath
+        Write-JsonFile @{ status = 'stopped'; sessionDirectory = $sessionDirectory } (Join-Path $auditStateRoot 'active.json')
+        $reportPath = New-Report $metadata $diffs
+        Write-Output "Audit stopped: $sessionDirectory"
+        Write-Output "Report: $reportPath"
+    }
+    'report' {
+        $sessionDirectory = Resolve-SessionDirectory $auditStateRoot
+        $metadata = Read-JsonFile (Join-Path $sessionDirectory 'metadata.json')
+        if ($metadata.status -ne 'stopped') { throw "Stop the audit before generating a report: $sessionDirectory" }
+        $reportPath = New-Report $metadata (Read-DiffSet $sessionDirectory)
+        Get-Content -LiteralPath $reportPath
+    }
+}

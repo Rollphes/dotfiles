@@ -15,7 +15,7 @@ if ! command -v pwsh.exe >/dev/null 2>&1; then
     exit 1
 fi
 
-implementation="$HOME/.local/share/dotfiles-audit/windows-leakage-audit.ps1"
+implementation="$HOME/.local/bin/audit.ps1"
 if [ ! -f "$implementation" ]; then
     echo "Audit implementation is missing: $implementation" >&2
     exit 1
