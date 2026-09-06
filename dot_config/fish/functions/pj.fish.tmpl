@@ -1,4 +1,4 @@
-function __pj_list_projects
+function __pj_inventory
     set -l exception_roots $argv
 
     if not set -q exception_roots[1]
@@ -7,18 +7,23 @@ function __pj_list_projects
 {{ end -}}
     end
 
-    set -l projects
-
-    if command -q ghq
-        set -a projects (ghq list --full-path 2>/dev/null)
-    end
+    set -l candidates
 
     if command -q zoxide
-        for directory in (zoxide query --list 2>/dev/null)
+        for entry in (zoxide query --list --score 2>/dev/null)
+            set -l score (string match -r '^\s*[0-9]+(?:\.[0-9]+)?' -- "$entry" | string trim)
+            set -l directory (string replace -r '^\s*[0-9]+(?:\.[0-9]+)?\s+' '' -- "$entry")
             set -l repository (git -C "$directory" rev-parse --show-toplevel 2>/dev/null)
-            if test -n "$repository"
-                set -a projects "$repository"
+
+            if test -n "$score" -a -n "$repository"
+                set -a candidates (string join \t -- "$score" zoxide "$repository")
             end
+        end
+    end
+
+    if command -q ghq
+        for repository in (ghq list --full-path 2>/dev/null)
+            set -a candidates (string join \t -- 0 ghq "$repository")
         end
     end
 
@@ -29,13 +34,18 @@ function __pj_list_projects
             end
 
             for git_entry in (fd --hidden --no-ignore --type directory --type file --glob .git --prune "$root" 2>/dev/null)
-                set -a projects (path dirname "$git_entry")
+                set -a candidates (string join \t -- 0 exception (path dirname "$git_entry"))
             end
         end
     end
 
     set -l seen
-    for project in $projects
+    for candidate in $candidates
+        set -l fields (string split \t -- "$candidate")
+        set -l score $fields[1]
+        set -l source $fields[2]
+        set -l project $fields[3]
+
         if not test -d "$project"
             continue
         end
@@ -55,7 +65,7 @@ function __pj_list_projects
         end
 
         set -a seen "$key"
-        printf '%s\n' "$resolved"
+        printf '%s\t%s\t%s\n' "$score" "$source" "$resolved"
     end
 end
 
@@ -70,20 +80,35 @@ function pj
         return 1
     end
 
-    set -l projects (__pj_list_projects)
-    if not set -q projects[1]
+    set -l inventory (__pj_inventory)
+    if not set -q inventory[1]
         echo 'pj: no repositories found' >&2
         return 0
     end
 
     set -l choices
-    for project in $projects
+    for item in $inventory
+        set -l fields (string split \t -- "$item")
+        set -l score $fields[1]
+        set -l source $fields[2]
+        set -l project $fields[3]
         set -l name (path basename "$project")
         set -l owner (path basename (path dirname "$project"))
-        set -a choices "$owner/$name\t$project"
+        set -l display
+
+        switch $source
+            case zoxide
+                set display (printf '󰅐 %5s  %s/%s' "$score" "$owner" "$name")
+            case ghq
+                set display (printf '󰊢     -  %s/%s' "$owner" "$name")
+            case exception
+                set display (printf '󰉋     -  %s/%s' "$owner" "$name")
+        end
+
+        set -a choices "$display\t$project"
     end
 
-    set -l preview_shell (command -s sh)
+    set -l preview_shell (command -s fish)
     if set -q MSYSTEM
         set preview_shell (cygpath -w "$preview_shell")
     end
@@ -92,12 +117,14 @@ function pj
         --height=80% \
         --layout=reverse \
         --border \
+        --no-sort \
         --delimiter='\t' \
         --with-nth=1 \
         --accept-nth=2 \
         --prompt='Project> ' \
+        --header='󰅐 zoxide  󰊢 ghq  󰉋 exception' \
         --with-shell="$preview_shell -c" \
-        --preview='LC_ALL=C.UTF-8 git -c core.quotepath=false -C {2} status --short --branch 2>/dev/null || true' \
+        --preview='__pj_preview {2}' \
         --preview-window='right,60%')
 
     if test $status -ne 0 -o -z "$selected"
