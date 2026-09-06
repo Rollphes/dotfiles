@@ -5,10 +5,17 @@ Captures a temporary Windows/MSYS2 runtime leakage audit session.
 .DESCRIPTION
 Use start before normal CLI work, stop afterward, and report to regenerate the
 human-readable summary. ProcMon attribution is enabled only when ProcMon is
-available, its EULA was already accepted, and no existing session is running.
+available, its EULA was already accepted, no existing session is running, and
+-ProcMonConfig names an audit-specific PMC with destructive path/write filters.
+
+.PARAMETER ProcMonConfig
+An exported ProcMon configuration with Drop Filtered Events enabled. It must
+include Path/Begins with rules for the displayed quarantine and host roots and
+Operation/Is rules for the write operations validated by this script. Create it
+in the ProcMon UI and export it without replacing your normal configuration.
 
 .EXAMPLE
-./tools/windows-leakage-audit.ps1 start
+./tools/windows-leakage-audit.ps1 start -ProcMonConfig C:\audit\leakage.pmc
 
 .EXAMPLE
 ./tools/windows-leakage-audit.ps1 stop
@@ -27,6 +34,7 @@ param(
     [string] $HostProfile,
     [string] $StateRoot,
     [string] $ProcMonPath,
+    [string] $ProcMonConfig,
     [switch] $SnapshotOnly
 )
 
@@ -36,7 +44,12 @@ $ErrorActionPreference = 'Stop'
 function Resolve-FullPath {
     param([Parameter(Mandatory)][string] $Path)
 
-    return [IO.Path]::GetFullPath($Path).TrimEnd([IO.Path]::DirectorySeparatorChar)
+    $fullPath = [IO.Path]::GetFullPath($Path)
+    $root = [IO.Path]::GetPathRoot($fullPath)
+    if ($fullPath.Equals($root, [StringComparison]::OrdinalIgnoreCase)) {
+        return $root
+    }
+    return $fullPath.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
 }
 
 function Resolve-CanonicalHome {
@@ -265,10 +278,131 @@ function Test-ProcMonEulaAccepted {
     }
 }
 
+function Read-ProcMonConfig {
+    param([Parameter(Mandatory)][string] $Path)
+
+    # PMC is undocumented. Reject the config when its expected layout changes.
+    $bytes = [IO.File]::ReadAllBytes($Path)
+    $offset = 0
+    $configuration = @{}
+    while ($offset -lt $bytes.Length) {
+        if ($bytes.Length - $offset -lt 16) { throw 'Invalid PMC record header.' }
+        $recordSize = [BitConverter]::ToUInt32($bytes, $offset)
+        $headerSize = [BitConverter]::ToUInt32($bytes, $offset + 4)
+        $headerAndNameSize = [BitConverter]::ToUInt32($bytes, $offset + 8)
+        $dataSize = [BitConverter]::ToUInt32($bytes, $offset + 12)
+        if ($headerSize -ne 16 -or $recordSize -ne $headerAndNameSize + $dataSize -or
+            $recordSize -eq 0 -or $offset + $recordSize -gt $bytes.Length) {
+            throw 'Invalid PMC record size.'
+        }
+
+        $nameSize = $headerAndNameSize - $headerSize
+        $name = [Text.Encoding]::Unicode.GetString($bytes, $offset + $headerSize, $nameSize).TrimEnd([char]0)
+        $dataOffset = $offset + $headerAndNameSize
+        $configuration[$name] = [pscustomobject]@{
+            bytes = $bytes
+            offset = $dataOffset
+            size = $dataSize
+        }
+        $offset += $recordSize
+    }
+    return $configuration
+}
+
+function Read-ProcMonFilterRules {
+    param([Parameter(Mandatory)] $Record)
+
+    if ($Record.size -lt 5 -or $Record.bytes[$Record.offset] -ne 1) {
+        throw 'Invalid PMC FilterRules record.'
+    }
+    $count = [BitConverter]::ToUInt32($Record.bytes, $Record.offset + 1)
+    $offset = $Record.offset + 5
+    $end = $Record.offset + $Record.size
+    $rules = [Collections.Generic.List[object]]::new()
+    for ($index = 0; $index -lt $count; $index++) {
+        if ($end - $offset -lt 21) { throw 'Invalid PMC filter rule.' }
+        $column = [BitConverter]::ToUInt32($Record.bytes, $offset)
+        $relation = [BitConverter]::ToUInt32($Record.bytes, $offset + 4)
+        $action = $Record.bytes[$offset + 8]
+        $valueLength = [BitConverter]::ToUInt32($Record.bytes, $offset + 9)
+        if ($valueLength % 2 -ne 0 -or $offset + 21 + $valueLength -gt $end) {
+            throw 'Invalid PMC filter value.'
+        }
+        $value = [Text.Encoding]::Unicode.GetString($Record.bytes, $offset + 13, $valueLength).TrimEnd([char]0)
+        $rules.Add([pscustomobject]@{
+            column = $column
+            relation = $relation
+            action = $action
+            value = $value
+        })
+        $offset += 21 + $valueLength
+    }
+    return @($rules)
+}
+
+function Test-ProcMonConfig {
+    param(
+        [Parameter(Mandatory)][string] $Path,
+        [Parameter(Mandatory)][string[]] $MonitoredRoots
+    )
+
+    $configuration = Read-ProcMonConfig $Path
+    if (-not $configuration.ContainsKey('DestructiveFilter') -or
+        $configuration.DestructiveFilter.size -lt 4 -or
+        [BitConverter]::ToUInt32(
+            $configuration.DestructiveFilter.bytes,
+            $configuration.DestructiveFilter.offset
+        ) -ne 1) {
+        throw 'ProcMon configuration must enable Drop Filtered Events.'
+    }
+    if (-not $configuration.ContainsKey('FilterRules')) {
+        throw 'ProcMon configuration has no filter rules.'
+    }
+
+    $rules = @(Read-ProcMonFilterRules $configuration.FilterRules)
+    $pathIncludes = @($rules | Where-Object { $_.column -eq 40071 -and $_.action -eq 1 })
+    if ($pathIncludes.Count -ne $MonitoredRoots.Count) {
+        throw 'ProcMon configuration contains an unexpected Path include rule.'
+    }
+    foreach ($root in $MonitoredRoots) {
+        $expected = (Resolve-FullPath $root).TrimEnd('\')
+        $matching = @($pathIncludes | Where-Object {
+            $_.relation -eq 4 -and
+            $_.value.TrimEnd('\').Equals($expected, [StringComparison]::OrdinalIgnoreCase)
+        })
+        if ($matching.Count -eq 0) {
+            throw "ProcMon configuration must include Path begins with: $expected"
+        }
+    }
+
+    $requiredOperations = @(
+        'CreateFile',
+        'WriteFile',
+        'SetEndOfFileInformationFile',
+        'SetRenameInformationFile',
+        'SetDispositionInformationFile',
+        'SetBasicInformationFile'
+    )
+    $operationIncludes = @($rules | Where-Object { $_.column -eq 40055 -and $_.action -eq 1 })
+    if ($operationIncludes.Count -ne $requiredOperations.Count) {
+        throw 'ProcMon configuration contains an unexpected Operation include rule.'
+    }
+    foreach ($operation in $requiredOperations) {
+        $matching = @($operationIncludes | Where-Object {
+            $_.relation -eq 0 -and
+            $_.value.Equals($operation, [StringComparison]::OrdinalIgnoreCase)
+        })
+        if ($matching.Count -eq 0) {
+            throw "ProcMon configuration must include Operation is: $operation"
+        }
+    }
+}
+
 function Start-ProcMonCapture {
     param(
         [Parameter(Mandatory)][string] $Executable,
-        [Parameter(Mandatory)][string] $PmlPath
+        [Parameter(Mandatory)][string] $PmlPath,
+        [Parameter(Mandatory)][string] $ConfigPath
     )
 
     if ((Get-ProcMonProcesses).Count -ne 0) {
@@ -278,7 +412,9 @@ function Start-ProcMonCapture {
         return [pscustomobject]@{ mode = 'snapshot-only'; reason = 'ProcMon EULA has not been accepted manually.'; owned = $false }
     }
 
-    Start-Process -FilePath $Executable -ArgumentList @('/Quiet', '/Minimized', '/BackingFile', $PmlPath) -WindowStyle Hidden | Out-Null
+    Start-Process -FilePath $Executable `
+        -ArgumentList @('/Quiet', '/Minimized', '/LoadConfig', $ConfigPath, '/BackingFile', $PmlPath) `
+        -WindowStyle Hidden | Out-Null
     $process = $null
     for ($attempt = 0; $attempt -lt 20 -and -not $process; $attempt++) {
         Start-Sleep -Milliseconds 250
@@ -344,6 +480,52 @@ function Test-PathWithin {
         $candidate.StartsWith("$rootPath\", [StringComparison]::OrdinalIgnoreCase)
 }
 
+function Get-ManagedBridgeRoots {
+    param([Parameter(Mandatory)][string] $ProfileRoot)
+
+    $manifestPath = Join-Path (Split-Path $PSScriptRoot -Parent) '.chezmoidata\windows-bridges.toml'
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { return @() }
+
+    return @(Get-Content -LiteralPath $manifestPath | ForEach-Object {
+        if ($_ -match '^\s*path\s*=\s*"(?<path>[^"]+)"\s*$') {
+            Resolve-FullPath (Join-Path $ProfileRoot ($Matches.path -replace '/', '\'))
+        }
+    })
+}
+
+function Get-ProcMonDetailField {
+    param(
+        [Parameter(Mandatory)][string] $Detail,
+        [Parameter(Mandatory)][string] $Name
+    )
+
+    $escapedName = [Regex]::Escape($Name)
+    $match = [Regex]::Match(
+        $Detail,
+        "(?:^|,\s*)${escapedName}:\s*(?<value>.*?)(?=,\s*[A-Za-z][A-Za-z ]+:\s|$)",
+        [Text.RegularExpressions.RegexOptions]::IgnoreCase
+    )
+    if (-not $match.Success) { return $null }
+    return $match.Groups['value'].Value.Trim()
+}
+
+function Test-CreateFileWrite {
+    param([Parameter(Mandatory)][string] $Detail)
+
+    $desiredAccess = Get-ProcMonDetailField $Detail 'Desired Access'
+    if ($desiredAccess -and $desiredAccess -match '(?i)(Generic Write|Write Data|Append Data|Write EA|Write Attributes|Delete|Change Permissions|Take Ownership)') {
+        return $true
+    }
+
+    $disposition = Get-ProcMonDetailField $Detail 'Disposition'
+    if ($disposition -and $disposition -match '^(?i:Create|OpenIf|Overwrite|OverwriteIf|Supersede)$') {
+        return $true
+    }
+
+    $options = Get-ProcMonDetailField $Detail 'Options'
+    return $options -and $options -match '(?i)Delete On Close'
+}
+
 function Get-WriteEvents {
     param([Parameter(Mandatory)] $Metadata)
 
@@ -361,7 +543,7 @@ function Get-WriteEvents {
     return @(Import-Csv -LiteralPath $Metadata.procmon.csvPath | Where-Object {
         if ($_.Operation -notin $operations) { return $false }
         if ($_.Operation -ne 'CreateFile') { return $true }
-        return $_.Detail -match '(?i)(Write|Append|Delete|Create|Overwrite|Supersede)'
+        return Test-CreateFileWrite $_.Detail
     })
 }
 
@@ -427,7 +609,25 @@ function New-Report {
     foreach ($entry in @($Diff.metadataOnly)) { $lines.Add("  $($entry.path)") }
     $lines.Add('')
 
-    $hostEvents = @($events | Where-Object { Test-PathWithin $_.Path $Metadata.hostProfileRoot })
+    $managedBridgeRoots = if ($Metadata.PSObject.Properties.Name -contains 'managedBridgeRoots') {
+        @($Metadata.managedBridgeRoots)
+    } else { @() }
+    $managedBridgeEvents = @($events | Where-Object {
+        $event = $_
+        @($managedBridgeRoots | Where-Object { Test-PathWithin $event.Path $_ }).Count -ne 0
+    })
+    $lines.Add("MANAGED BRIDGE ACCESS: $($managedBridgeEvents.Count)")
+    foreach ($event in $managedBridgeEvents | Sort-Object Path, 'Process Name', PID, Operation -Unique) {
+        $lines.Add("  path: $($event.Path)")
+        $lines.Add("    process: $($event.'Process Name')  pid=$($event.PID)  operation=$($event.Operation)")
+    }
+    $lines.Add('')
+
+    $hostEvents = @($events | Where-Object {
+        $event = $_
+        (Test-PathWithin $event.Path $Metadata.hostProfileRoot) -and
+        @($managedBridgeRoots | Where-Object { Test-PathWithin $event.Path $_ }).Count -eq 0
+    })
     $lines.Add("HOST LEAKAGE: $($hostEvents.Count)")
     foreach ($event in $hostEvents | Sort-Object Path, 'Process Name', PID, Operation -Unique) {
         $lines.Add("  path: $($event.Path)")
@@ -454,21 +654,29 @@ function Resolve-SessionDirectory {
         [switch] $RequireActive
     )
 
-    if ($Session) {
+    $sessionDirectory = if ($Session) {
         $candidate = if ([IO.Path]::IsPathFullyQualified($Session)) { $Session } else { Join-Path $AuditStateRoot $Session }
-        return Resolve-FullPath $candidate
+        Resolve-FullPath $candidate
+    } else {
+        $activePath = Join-Path $AuditStateRoot 'active.json'
+        if (Test-Path -LiteralPath $activePath) {
+            (Read-JsonFile $activePath).sessionDirectory
+        } else {
+            if ($RequireActive) { throw 'No active audit session was found.' }
+            $latest = Get-ChildItem -LiteralPath $AuditStateRoot -Directory -ErrorAction SilentlyContinue |
+                Sort-Object Name -Descending | Select-Object -First 1
+            if (-not $latest) { throw 'No audit session was found.' }
+            $latest.FullName
+        }
     }
 
-    $activePath = Join-Path $AuditStateRoot 'active.json'
-    if (Test-Path -LiteralPath $activePath) {
-        return (Read-JsonFile $activePath).sessionDirectory
+    $resolved = Resolve-FullPath $sessionDirectory
+    $stateRootPath = Resolve-FullPath $AuditStateRoot
+    if ($resolved.Equals($stateRootPath, [StringComparison]::OrdinalIgnoreCase) -or
+        -not (Test-PathWithin $resolved $stateRootPath)) {
+        throw "Audit session must remain below the audit state root: $resolved"
     }
-    if ($RequireActive) { throw 'No active audit session was found.' }
-
-    $latest = Get-ChildItem -LiteralPath $AuditStateRoot -Directory -ErrorAction SilentlyContinue |
-        Sort-Object Name -Descending | Select-Object -First 1
-    if (-not $latest) { throw 'No audit session was found.' }
-    return $latest.FullName
+    return $resolved
 }
 
 $canonicalHomePath = Resolve-CanonicalHome
@@ -499,10 +707,26 @@ switch ($Command) {
         New-Snapshot $quarantineRoot (Join-Path $sessionDirectory 'before.json') | Out-Null
 
         $executable = if ($SnapshotOnly) { $null } else { Find-ProcMon }
+        $sessionConfigPath = Join-Path $sessionDirectory 'procmon.pmc'
         $procmon = if (-not $executable) {
             [pscustomobject]@{ mode = 'snapshot-only'; reason = 'ProcMon unavailable.'; owned = $false }
+        } elseif (-not $ProcMonConfig) {
+            [pscustomobject]@{
+                mode = 'snapshot-only'
+                reason = 'ProcMon capture requires -ProcMonConfig with destructive audit filters.'
+                owned = $false
+            }
         } else {
-            Start-ProcMonCapture $executable (Join-Path $sessionDirectory 'procmon.pml')
+            $sourceConfigPath = Resolve-FullPath $ProcMonConfig
+            if (-not (Test-Path -LiteralPath $sourceConfigPath -PathType Leaf)) {
+                throw "ProcMon configuration not found: $sourceConfigPath"
+            }
+            Test-ProcMonConfig $sourceConfigPath @($quarantineRoot, $hostProfilePath)
+            Copy-Item -LiteralPath $sourceConfigPath -Destination $sessionConfigPath
+            Start-ProcMonCapture `
+                $executable `
+                (Join-Path $sessionDirectory 'procmon.pml') `
+                $sessionConfigPath
         }
 
         $metadata = [ordered]@{
@@ -514,12 +738,14 @@ switch ($Command) {
             canonicalHome = $canonicalHomePath
             quarantineRoot = $quarantineRoot
             hostProfileRoot = $hostProfilePath
+            managedBridgeRoots = @(Get-ManagedBridgeRoots $hostProfilePath)
             stateRoot = $auditStateRoot
             sessionDirectory = $sessionDirectory
             procmon = [ordered]@{
                 mode = $procmon.mode
                 reason = $procmon.reason
                 executable = $executable
+                configPath = if (Test-Path -LiteralPath $sessionConfigPath) { $sessionConfigPath } else { $null }
                 owned = $procmon.owned
                 pid = if ($procmon.PSObject.Properties.Name -contains 'pid') { $procmon.pid } else { $null }
                 pmlPath = Join-Path $sessionDirectory 'procmon.pml'
