@@ -756,8 +756,19 @@ switch ($Command) {
             }
             warnings = @()
         }
-        Write-JsonFile $metadata (Join-Path $sessionDirectory 'metadata.json')
-        Write-JsonFile @{ status = 'running'; sessionDirectory = $sessionDirectory } $activePath
+        try {
+            Write-JsonFile $metadata (Join-Path $sessionDirectory 'metadata.json')
+            Write-JsonFile @{ status = 'running'; sessionDirectory = $sessionDirectory } $activePath
+        } catch {
+            $initializationError = $_
+            try {
+                $warning = Stop-ProcMonCapture ([pscustomobject]$metadata)
+                if ($warning) { Write-Warning $warning }
+            } catch {
+                Write-Warning "ProcMon cleanup failed after audit initialization failed: $_"
+            }
+            throw $initializationError
+        }
         Write-Output "Audit started: $sessionDirectory"
         Write-Output "ProcMon mode: $($procmon.mode)"
         if ($procmon.reason) { Write-Warning $procmon.reason }
@@ -769,11 +780,25 @@ switch ($Command) {
         $metadata = Read-JsonFile $metadataPath
         if ($metadata.status -ne 'running') { throw "Audit session is not running: $sessionDirectory" }
 
-        $after = New-Snapshot $metadata.quarantineRoot (Join-Path $sessionDirectory 'after.json')
-
         $warnings = [Collections.Generic.List[string]]::new()
-        $warning = Stop-ProcMonCapture $metadata
+        $snapshotError = $null
+        try {
+            $after = New-Snapshot $metadata.quarantineRoot (Join-Path $sessionDirectory 'after.json')
+        } catch {
+            $snapshotError = $_
+        } finally {
+            try {
+                $warning = Stop-ProcMonCapture $metadata
+            } catch {
+                $warning = "ProcMon cleanup failed while stopping the audit: $_"
+            }
+        }
         if ($warning) { $warnings.Add($warning) }
+        if ($snapshotError) {
+            foreach ($message in $warnings) { Write-Warning $message }
+            throw $snapshotError
+        }
+
         $warning = Export-ProcMonCsv $metadata
         if ($warning) { $warnings.Add($warning) }
 
