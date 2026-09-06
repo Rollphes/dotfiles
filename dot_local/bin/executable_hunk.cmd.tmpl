@@ -3,11 +3,9 @@ setlocal
 
 set "HUNK_TEMP={{ .chezmoi.homeDir }}\.cache\hunk\tmp"
 if not exist "%HUNK_TEMP%" mkdir "%HUNK_TEMP%" || exit /b 1
+set "BUN_TMPDIR=%HUNK_TEMP%"
 set "TEMP=%HUNK_TEMP%"
 set "TMP=%HUNK_TEMP%"
 
-for /f "usebackq delims=" %%I in (`mise which hunk`) do set "HUNK_EXECUTABLE=%%I"
-if not defined HUNK_EXECUTABLE exit /b 1
-
-"%HUNK_EXECUTABLE%" %*
+"%~dp0..\share\mise\shims\hunk.exe" %*
 exit /b %ERRORLEVEL%
