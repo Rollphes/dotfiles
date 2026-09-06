@@ -48,10 +48,22 @@ jobs:
           $msysHome = "C:\msys64\home\$env:USERNAME"
           $cargoHome = "$msysHome\.cargo"
           $rustupHome = "$msysHome\.rustup"
+          $xdgConfigHome = "$msysHome\.config"
+          $xdgDataHome = "$msysHome\.local\share"
+          $xdgStateHome = "$msysHome\.local\state"
+          $xdgCacheHome = "$msysHome\.cache"
           New-Item -ItemType Directory -Force -Path $msysHome | Out-Null
           "HOME=$msysHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "CARGO_HOME=$cargoHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "RUSTUP_HOME=$rustupHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "XDG_CONFIG_HOME=$xdgConfigHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "XDG_DATA_HOME=$xdgDataHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "XDG_STATE_HOME=$xdgStateHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "XDG_CACHE_HOME=$xdgCacheHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "UV_CACHE_DIR=$xdgCacheHome\uv" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "UV_TOOL_DIR=$xdgDataHome\uv\tools" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "UV_PYTHON_INSTALL_DIR=$xdgDataHome\uv\python" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "_ZO_DATA_DIR=$xdgDataHome\zoxide" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           'MSYSTEM=UCRT64' | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           'C:\msys64\ucrt64\bin' | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
           'C:\msys64\usr\bin' | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
