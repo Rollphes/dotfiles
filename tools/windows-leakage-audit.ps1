@@ -435,7 +435,7 @@ function Start-ProcMonCapture {
         [Parameter(Mandatory)][string] $ConfigPath
     )
 
-    if ((Get-ProcMonProcesses).Count -ne 0) {
+    if (@(Get-ProcMonProcesses).Count -ne 0) {
         throw 'Another ProcMon session is already running. Stop it before starting the audit.'
     }
     if (-not (Test-ProcMonEulaAccepted)) {
@@ -464,7 +464,7 @@ function Stop-ProcMonCapture {
         return $null
     }
 
-    $running = Get-ProcMonProcesses
+    $running = @(Get-ProcMonProcesses)
     if ($running.Count -eq 0) { return $null }
 
     $owned = @($running | Where-Object { $_.Id -eq [int]$Metadata.procmon.pid })
@@ -485,7 +485,7 @@ function Export-ProcMonCsv {
     if (-not $Metadata.procmon.executable -or -not (Test-Path -LiteralPath $Metadata.procmon.pmlPath)) {
         return $null
     }
-    if ((Get-ProcMonProcesses).Count -ne 0) {
+    if (@(Get-ProcMonProcesses).Count -ne 0) {
         return 'ProcMon CSV export skipped while a ProcMon session is running.'
     }
 
