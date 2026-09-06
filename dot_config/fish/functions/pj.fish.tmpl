@@ -1,10 +1,26 @@
+function __pj_print_candidate --argument-names score source project
+    set -l path_parts (string split / -- (string trim -r -c / -- "$project"))
+    set -l name $path_parts[-1]
+    set -l owner $path_parts[-2]
+
+    switch $source
+        case ghq
+            printf '\U000f02a2 %5s  %s/%s\t%s\n' "$score" "$owner" "$name" "$project"
+        case exception
+            printf '\U000f024b %5s  %s/%s\t%s\n' "$score" "$owner" "$name" "$project"
+    end
+end
+
 function __pj_inventory
     set -l exception_repositories $argv
+    set -l exception_file "$XDG_DATA_HOME/pj/exceptions"
 
-    if not set -q exception_repositories[1]
-{{ if eq .chezmoi.os "windows" -}}
-        set exception_repositories "$USERPROFILE/Documents/UnityProject/av-kaihenkai-v2"
-{{ end -}}
+    if test -f "$exception_file"
+        while read -l repository
+            if test -n "$repository"
+                set -a exception_repositories "$repository"
+            end
+        end <"$exception_file"
     end
 
     set -l candidates
@@ -99,7 +115,7 @@ function __pj_inventory
 
             if test $match_index -gt 0; and not contains -- "$inventory_keys[$match_index]" $ranked_keys
                 set -a ranked_keys "$inventory_keys[$match_index]"
-                printf '%s\t%s\t%s\n' "$score" "$inventory_sources[$match_index]" "$inventory_paths[$match_index]"
+                __pj_print_candidate "$score" "$inventory_sources[$match_index]" "$inventory_paths[$match_index]"
             end
         end
     end
@@ -107,13 +123,112 @@ function __pj_inventory
     set -l index 1
     for repository_key in $inventory_keys
         if not contains -- "$repository_key" $ranked_keys
-            printf '0\t%s\t%s\n' "$inventory_sources[$index]" "$inventory_paths[$index]"
+            __pj_print_candidate 0 "$inventory_sources[$index]" "$inventory_paths[$index]"
         end
         set index (math $index + 1)
     end
 end
 
 function pj
+    argparse 'h/help' -- $argv
+    or return 2
+
+    if set -q _flag_help
+        printf '%s\n' \
+            'Usage: pj [COMMAND] [PATH]' \
+            '' \
+            'Select a project and change the current directory.' \
+            '' \
+            'Commands:' \
+            '  add [PATH]     Register an exception repository (default: current directory)' \
+            '  remove        Select and remove an exception repository' \
+            '' \
+            'Options:' \
+            '  -h, --help     Show this help'
+        return 0
+    end
+
+    set -l command $argv[1]
+    set -l exception_directory "$XDG_DATA_HOME/pj"
+    set -l exception_file "$exception_directory/exceptions"
+
+    switch "$command"
+        case add
+            if test (count $argv) -gt 2
+                echo 'pj: add accepts at most one path' >&2
+                return 2
+            end
+
+            set -l repository $argv[2]
+            if test -z "$repository"
+                set repository $PWD
+            end
+            if not test -d "$repository"; or not test -e "$repository/.git"
+                echo "pj: not a repository: $repository" >&2
+                return 1
+            end
+
+            set repository (path resolve "$repository")
+            set -l repository_key "$repository"
+            if set -q MSYSTEM
+                set repository_key (string lower "$repository_key")
+            end
+
+            if test -f "$exception_file"
+                while read -l existing
+                    set -l existing_key "$existing"
+                    if set -q MSYSTEM
+                        set existing_key (string lower "$existing_key")
+                    end
+                    if test "$existing_key" = "$repository_key"
+                        echo "pj: already registered: $repository"
+                        return 0
+                    end
+                end <"$exception_file"
+            end
+
+            command mkdir -p -- "$exception_directory"
+            printf '%s\n' "$repository" >>"$exception_file"
+            echo "pj: registered: $repository"
+            return 0
+
+        case remove
+            if test (count $argv) -ne 1
+                echo 'pj: remove does not accept a path' >&2
+                return 2
+            end
+            if not test -s "$exception_file"
+                echo 'pj: no exception repositories registered' >&2
+                return 0
+            end
+
+            set -l selection_file (mktemp)
+            fzf --height=60% --layout=reverse --border --prompt='Remove project> ' <"$exception_file" >"$selection_file"
+            set -l fzf_status $status
+            set -l selected
+            read -l selected <"$selection_file"
+            command rm -f -- "$selection_file"
+            if test $fzf_status -ne 0 -o -z "$selected"
+                return 0
+            end
+
+            set -l replacement_file (mktemp "$exception_directory/exceptions.XXXXXX")
+            while read -l existing
+                if test "$existing" != "$selected"
+                    printf '%s\n' "$existing" >>"$replacement_file"
+                end
+            end <"$exception_file"
+            command mv -f -- "$replacement_file" "$exception_file"
+            echo "pj: removed: $selected"
+            return 0
+
+        case ''
+        case '*'
+            echo "pj: unknown command: $command" >&2
+            echo 'Try: pj --help' >&2
+            return 2
+    end
+
     if not command -q ghq
         echo 'pj: ghq is not available' >&2
         return 1
@@ -124,38 +239,18 @@ function pj
         return 1
     end
 
-    set -l inventory (__pj_inventory)
-    if not set -q inventory[1]
-        echo 'pj: no repositories found' >&2
-        return 0
-    end
-
-    set -l choices
-    for item in $inventory
-        set -l fields (string split \t -- "$item")
-        set -l score $fields[1]
-        set -l source $fields[2]
-        set -l project $fields[3]
-        set -l name (path basename "$project")
-        set -l owner (path basename (path dirname "$project"))
-        set -l display
-
-        switch $source
-            case ghq
-                set display (printf '󰊢 %5s  %s/%s' "$score" "$owner" "$name")
-            case exception
-                set display (printf '󰉋 %5s  %s/%s' "$score" "$owner" "$name")
-        end
-
-        set -a choices "$display\t$project"
-    end
-
     set -l preview_shell (command -s sh)
     if set -q MSYSTEM
         set preview_shell (cygpath -w "$preview_shell")
     end
 
-    set -l selected (printf '%b\n' $choices | fzf \
+    set -l selection_file (mktemp)
+    if test $status -ne 0 -o -z "$selection_file"
+        echo 'pj: could not create selection file' >&2
+        return 1
+    end
+
+    __pj_inventory | fzf \
         --height=80% \
         --layout=reverse \
         --border \
@@ -164,13 +259,18 @@ function pj
         --with-nth=1 \
         --accept-nth=2 \
         --prompt='Project> ' \
-        --header='󰊢 ghq  󰉋 exception  score: zoxide frecency  Ctrl+P: preview' \
+        --header='󰊢 ghq  󰉋 exception' \
         --with-shell="$preview_shell -c" \
         --preview='"$XDG_CONFIG_HOME/fish/libexec/pj-preview" {2}' \
-        --preview-window='right,60%,hidden' \
-        --bind='ctrl-p:toggle-preview')
+        --preview-window='right,60%' \
+        --bind='ctrl-p:toggle-preview' >"$selection_file"
+    set -l fzf_status $pipestatus[2]
 
-    if test $status -ne 0 -o -z "$selected"
+    set -l selected
+    read -l selected <"$selection_file"
+    command rm -f -- "$selection_file"
+
+    if test $fzf_status -ne 0 -o -z "$selected"
         return 0
     end
 
