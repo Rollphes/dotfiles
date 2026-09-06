@@ -3,4 +3,8 @@ destDir = "C:/msys64/home/{{ env "USERNAME" }}"
 
 [interpreters.sh]
 command = "C:/msys64/usr/bin/sh.exe"
+
+[cd]
+command = "C:/msys64/usr/bin/fish.exe"
+args = ["--login"]
 {{- end }}
