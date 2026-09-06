@@ -214,7 +214,14 @@ jobs:
             throw "Rust escaped the MSYS2 home: $rustupHome"
           }
 
-          $fishEnvironment = @(& 'C:\msys64\usr\bin\fish.exe' -c @'
+          $fishConfigHome = (
+            & 'C:\msys64\usr\bin\cygpath.exe' -u $env:XDG_CONFIG_HOME
+          ).Trim()
+          $fishEnvironment = @(
+            & 'C:\msys64\usr\bin\env.exe' `
+              "XDG_CONFIG_HOME=$fishConfigHome" `
+              'C:\msys64\usr\bin\fish.exe' `
+              -c @'
           printf '%s\n' "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$APPDATA" "$LOCALAPPDATA" "$UV_CACHE_DIR" "$UV_TOOL_DIR" "$UV_PYTHON_INSTALL_DIR" "$_ZO_DATA_DIR"
           '@
           )
