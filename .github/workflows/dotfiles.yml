@@ -63,6 +63,7 @@ jobs:
           "XDG_CACHE_HOME=$xdgCacheHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "TEMP=$msysTemp" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "TMP=$msysTemp" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "GHQ_ROOT=$msysHome\ghq" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "MISE_CONFIG_DIR=$xdgConfigHome\mise" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "MISE_DATA_DIR=$xdgDataHome\mise" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "MISE_STATE_DIR=$xdgStateHome\mise" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
@@ -204,6 +205,9 @@ jobs:
           [[ "$(chezmoi --source "$GITHUB_WORKSPACE" target-path)" == "$HOME" ]]
           git lfs version
           mise --version
+          ghq --version
+          [[ "$(ghq root)" == "$HOME/ghq" ]]
+          [[ "$(ghq root --all)" == "$HOME/ghq" ]]
           rustup show active-toolchain
           bash .github/scripts/verify-fonts.sh
 
@@ -261,13 +265,13 @@ jobs:
               "XDG_CONFIG_HOME=$fishConfigHome" `
               'C:\msys64\usr\bin\fish.exe' `
               -c @'
-          printf '%s\n' "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$APPDATA" "$LOCALAPPDATA" "$TEMP" "$TMP" "$MISE_CONFIG_DIR" "$MISE_DATA_DIR" "$MISE_STATE_DIR" "$MISE_CACHE_DIR" "$MISE_TMP_DIR" "$AUBE_CACHE_DIR" "$AUBE_STORE_DIR" "$ATUIN_CONFIG_DIR" "$UV_CACHE_DIR" "$UV_TOOL_DIR" "$UV_PYTHON_INSTALL_DIR" "$_ZO_DATA_DIR"
+          printf '%s\n' "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$APPDATA" "$LOCALAPPDATA" "$TEMP" "$TMP" "$GHQ_ROOT" "$MISE_CONFIG_DIR" "$MISE_DATA_DIR" "$MISE_STATE_DIR" "$MISE_CACHE_DIR" "$MISE_TMP_DIR" "$AUBE_CACHE_DIR" "$AUBE_STORE_DIR" "$ATUIN_CONFIG_DIR" "$UV_CACHE_DIR" "$UV_TOOL_DIR" "$UV_PYTHON_INSTALL_DIR" "$_ZO_DATA_DIR"
           '@
           )
           $emptyEnvironment = @(
             $fishEnvironment | Where-Object { [string]::IsNullOrWhiteSpace($_) }
           )
-          if ($fishEnvironment.Count -ne 20 -or $emptyEnvironment.Count -ne 0) {
+          if ($fishEnvironment.Count -ne 21 -or $emptyEnvironment.Count -ne 0) {
             throw "Unexpected Fish environment output: $($fishEnvironment.Count) values"
           }
           $expectedEnvironment = @(
@@ -279,6 +283,7 @@ jobs:
             "$env:HOME\.winprofile\AppData\Local",
             'C:\msys64\tmp',
             'C:\msys64\tmp',
+            "$env:HOME\ghq",
             "$env:HOME\.config\mise",
             "$env:HOME\.local\share\mise",
             "$env:HOME\.local\state\mise",
@@ -299,6 +304,22 @@ jobs:
           }
           if (Compare-Object $expectedEnvironment $actualEnvironment) {
             throw 'Fish environment escaped the MSYS2 home quarantine'
+          }
+
+          $ghqRoot = [IO.Path]::GetFullPath((ghq root).Trim())
+          $expectedGhqRoot = [IO.Path]::GetFullPath("$env:HOME\ghq")
+          if (-not $ghqRoot.Equals($expectedGhqRoot, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "ghq escaped the MSYS2 home: $ghqRoot"
+          }
+          $ghqRoots = @(ghq root --all)
+          if (
+            $ghqRoots.Count -ne 1 -or
+            -not [IO.Path]::GetFullPath($ghqRoots[0].Trim()).Equals(
+              $expectedGhqRoot,
+              [StringComparison]::OrdinalIgnoreCase
+            )
+          ) {
+            throw "Unexpected ghq roots: $($ghqRoots -join ', ')"
           }
 
           $miseData = [IO.Path]::GetFullPath("$env:HOME\.local\share\mise")

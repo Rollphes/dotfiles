@@ -24,6 +24,7 @@ local function windows_native_tool_environment()
     XDG_CACHE_HOME = paths.cache,
     TEMP = msys2_root .. '\\tmp',
     TMP = msys2_root .. '\\tmp',
+    GHQ_ROOT = home .. '\\ghq',
     MISE_CONFIG_DIR = paths.config .. '\\mise',
     MISE_DATA_DIR = paths.data .. '\\mise',
     MISE_STATE_DIR = paths.state .. '\\mise',

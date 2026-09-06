@@ -6,6 +6,7 @@ set -gx APPDATA "$HOME/.winprofile/AppData/Roaming"
 set -gx LOCALAPPDATA "$HOME/.winprofile/AppData/Local"
 set -gx TEMP /tmp
 set -gx TMP /tmp
+set -gx GHQ_ROOT "$HOME/ghq"
 
 set -gx MISE_CONFIG_DIR "$XDG_CONFIG_HOME/mise"
 set -gx MISE_DATA_DIR "$XDG_DATA_HOME/mise"
