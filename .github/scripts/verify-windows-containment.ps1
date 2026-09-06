@@ -10,7 +10,7 @@ $active = Get-Content -LiteralPath (Join-Path $StateRoot 'active.json') -Raw |
     ConvertFrom-Json
 
 $checks = @(
-    @{ diff = 'local'; paths = @('mise', 'aube', 'ghq') },
+    @{ diff = 'local'; paths = @('mise', 'aube', 'uv', 'ghq') },
     @{ diff = 'roaming'; paths = @('ghq') },
     @{ diff = 'temp'; paths = @('mise') },
     @{ diff = 'profileDotRoots'; paths = @('.local/state/mise', '.ghq') }

@@ -26,19 +26,54 @@ if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
     console_status "SKIP" "cargo:*" "backend" "excluded in CI"
 fi
 
-if ! mise install --yes; then
-    console_status "ERROR" "toolset" "install" "mise install failed"
-    console_failed "$component"
-    exit 1
-fi
+(
+{{ if eq .chezmoi.os "windows" -}}
+    native_home="$(cygpath -m "$HOME")"
+    native_config="$(cygpath -m "$XDG_CONFIG_HOME")"
+    native_data="$(cygpath -m "$XDG_DATA_HOME")"
+    native_state="$(cygpath -m "$XDG_STATE_HOME")"
+    native_cache="$(cygpath -m "$XDG_CACHE_HOME")"
+    native_tmp="$(cygpath -m "$TEMP")"
 
-console_status "OK" "toolset" "install" "missing tools installed"
+    export HOME="$native_home"
+    export APPDATA="$native_home/.winprofile/AppData/Roaming"
+    export LOCALAPPDATA="$native_home/.winprofile/AppData/Local"
+    export TEMP="$native_tmp"
+    export TMP="$native_tmp"
+    export XDG_CONFIG_HOME="$native_config"
+    export XDG_DATA_HOME="$native_data"
+    export XDG_STATE_HOME="$native_state"
+    export XDG_CACHE_HOME="$native_cache"
+    export GHQ_ROOT="$native_home/ghq"
+    export MISE_CONFIG_DIR="$native_config/mise"
+    export MISE_DATA_DIR="$native_data/mise"
+    export MISE_STATE_DIR="$native_state/mise"
+    export MISE_CACHE_DIR="$native_cache/mise"
+    export MISE_TMP_DIR="$native_cache/mise/tmp"
+    export AUBE_CACHE_DIR="$native_cache/aube"
+    export AUBE_STORE_DIR="$native_data/aube/store"
+    export ATUIN_CONFIG_DIR="$native_config/atuin"
+    export UV_CACHE_DIR="$native_cache/uv"
+    export UV_TOOL_DIR="$native_data/uv/tools"
+    export UV_PYTHON_INSTALL_DIR="$native_data/uv/python"
+    export _ZO_DATA_DIR="$native_data/zoxide"
+{{ end -}}
 
-if ! mise upgrade --yes --no-prune; then
-    console_status "ERROR" "toolset" "upgrade" "mise upgrade failed"
-    console_failed "$component"
-    exit 1
-fi
+    if ! mise install --yes; then
+        console_status "ERROR" "toolset" "install" "mise install failed"
+        console_failed "$component"
+        exit 1
+    fi
 
-console_status "OK" "toolset" "upgrade" "managed versions current"
+    console_status "OK" "toolset" "install" "missing tools installed"
+
+    if ! mise upgrade --yes --no-prune; then
+        console_status "ERROR" "toolset" "upgrade" "mise upgrade failed"
+        console_failed "$component"
+        exit 1
+    fi
+
+    console_status "OK" "toolset" "upgrade" "managed versions current"
+)
+
 console_complete "$component" "managed tools converged"

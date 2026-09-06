@@ -306,6 +306,12 @@ jobs:
             throw 'Fish environment escaped the MSYS2 home quarantine'
           }
 
+          $uvCache = [IO.Path]::GetFullPath((uv cache dir).Trim())
+          $expectedUvCache = [IO.Path]::GetFullPath("$env:XDG_CACHE_HOME\uv")
+          if (-not $uvCache.Equals($expectedUvCache, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "uv cache escaped the MSYS2 home: $uvCache"
+          }
+
           $ghqRoot = [IO.Path]::GetFullPath((ghq root).Trim())
           $expectedGhqRoot = [IO.Path]::GetFullPath("$env:HOME\ghq")
           if (-not $ghqRoot.Equals($expectedGhqRoot, [StringComparison]::OrdinalIgnoreCase)) {
@@ -325,6 +331,13 @@ jobs:
           $miseData = [IO.Path]::GetFullPath("$env:HOME\.local\share\mise")
           if (-not (Test-Path -LiteralPath $miseData -PathType Container)) {
             throw "mise data is missing from the MSYS2 home: $miseData"
+          }
+          $ghqInstall = [IO.Path]::GetFullPath((mise where ghq).Trim())
+          if (-not $ghqInstall.StartsWith(
+            "$miseData$([IO.Path]::DirectorySeparatorChar)",
+            [StringComparison]::OrdinalIgnoreCase
+          )) {
+            throw "mise install escaped the MSYS2 home: $ghqInstall"
           }
 
           foreach ($relativePath in '.gitconfig', '.config\wezterm') {
