@@ -60,6 +60,14 @@ jobs:
           "XDG_DATA_HOME=$xdgDataHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "XDG_STATE_HOME=$xdgStateHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "XDG_CACHE_HOME=$xdgCacheHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "MISE_CONFIG_DIR=$xdgConfigHome\mise" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "MISE_DATA_DIR=$xdgDataHome\mise" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "MISE_STATE_DIR=$xdgStateHome\mise" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "MISE_CACHE_DIR=$xdgCacheHome\mise" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "MISE_TMP_DIR=$xdgCacheHome\mise\tmp" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "AUBE_CACHE_DIR=$xdgCacheHome\aube" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "AUBE_STORE_DIR=$xdgDataHome\aube\store" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "ATUIN_CONFIG_DIR=$xdgConfigHome\atuin" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "UV_CACHE_DIR=$xdgCacheHome\uv" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "UV_TOOL_DIR=$xdgDataHome\uv\tools" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "UV_PYTHON_INSTALL_DIR=$xdgDataHome\uv\python" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
@@ -181,6 +189,8 @@ jobs:
           & $auditScript `
             report `
             -StateRoot "$env:HOME\.local\state\dotfiles-leakage-ci\first"
+          & .github/scripts/verify-windows-containment.ps1 `
+            -StateRoot "$env:HOME\.local\state\dotfiles-leakage-ci\first"
 
       - name: Verify managed contracts
         if: runner.os != 'Windows'
@@ -248,13 +258,13 @@ jobs:
               "XDG_CONFIG_HOME=$fishConfigHome" `
               'C:\msys64\usr\bin\fish.exe' `
               -c @'
-          printf '%s\n' "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$APPDATA" "$LOCALAPPDATA" "$UV_CACHE_DIR" "$UV_TOOL_DIR" "$UV_PYTHON_INSTALL_DIR" "$_ZO_DATA_DIR"
+          printf '%s\n' "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$APPDATA" "$LOCALAPPDATA" "$MISE_CONFIG_DIR" "$MISE_DATA_DIR" "$MISE_STATE_DIR" "$MISE_CACHE_DIR" "$MISE_TMP_DIR" "$AUBE_CACHE_DIR" "$AUBE_STORE_DIR" "$ATUIN_CONFIG_DIR" "$UV_CACHE_DIR" "$UV_TOOL_DIR" "$UV_PYTHON_INSTALL_DIR" "$_ZO_DATA_DIR"
           '@
           )
           $emptyEnvironment = @(
             $fishEnvironment | Where-Object { [string]::IsNullOrWhiteSpace($_) }
           )
-          if ($fishEnvironment.Count -ne 10 -or $emptyEnvironment.Count -ne 0) {
+          if ($fishEnvironment.Count -ne 18 -or $emptyEnvironment.Count -ne 0) {
             throw "Unexpected Fish environment output: $($fishEnvironment.Count) values"
           }
           $expectedEnvironment = @(
@@ -264,6 +274,14 @@ jobs:
             "$env:HOME\.cache",
             "$env:HOME\.winprofile\AppData\Roaming",
             "$env:HOME\.winprofile\AppData\Local",
+            "$env:HOME\.config\mise",
+            "$env:HOME\.local\share\mise",
+            "$env:HOME\.local\state\mise",
+            "$env:HOME\.cache\mise",
+            "$env:HOME\.cache\mise\tmp",
+            "$env:HOME\.cache\aube",
+            "$env:HOME\.local\share\aube\store",
+            "$env:HOME\.config\atuin",
             "$env:HOME\.cache\uv",
             "$env:HOME\.local\share\uv\tools",
             "$env:HOME\.local\share\uv\python",
@@ -326,6 +344,8 @@ jobs:
             -StateRoot $secondAuditState
           & $auditScript `
             report `
+            -StateRoot $secondAuditState
+          & .github/scripts/verify-windows-containment.ps1 `
             -StateRoot $secondAuditState
 
           if (@($secondApply | Select-String -SimpleMatch 'already installed').Count -ne 2) {
