@@ -148,6 +148,20 @@ jobs:
         run: |
           chezmoi --source "$GITHUB_WORKSPACE" init --apply --no-tty
 
+      - name: Start Windows first-apply leakage audit
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $auditScript = Join-Path $env:RUNNER_TEMP 'windows-leakage-audit.ps1'
+          chezmoi `
+            --source $env:GITHUB_WORKSPACE `
+            execute-template `
+            --file .\dot_local\bin\executable_audit.ps1.tmpl `
+            --output $auditScript
+          & $auditScript `
+            start `
+            -StateRoot "$env:HOME\.local\state\dotfiles-leakage-ci\first"
+
       - name: Initialize and apply on Windows
         if: runner.os == 'Windows'
         shell: pwsh
@@ -155,6 +169,18 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           chezmoi --source $env:GITHUB_WORKSPACE init --apply --no-tty
+
+      - name: Report Windows first-apply leakage
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $auditScript = Join-Path $env:RUNNER_TEMP 'windows-leakage-audit.ps1'
+          & $auditScript `
+            stop `
+            -StateRoot "$env:HOME\.local\state\dotfiles-leakage-ci\first"
+          & $auditScript `
+            report `
+            -StateRoot "$env:HOME\.local\state\dotfiles-leakage-ci\first"
 
       - name: Verify managed contracts
         if: runner.os != 'Windows'
@@ -285,9 +311,23 @@ jobs:
             }
           }
 
+          $secondAuditState = "$env:HOME\.local\state\dotfiles-leakage-ci\second"
+          $auditScript = Join-Path $env:RUNNER_TEMP 'windows-leakage-audit.ps1'
+          & $auditScript `
+            start `
+            -StateRoot $secondAuditState
+
           $secondApply = chezmoi --source $env:GITHUB_WORKSPACE apply --no-tty
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $secondApply
+
+          & $auditScript `
+            stop `
+            -StateRoot $secondAuditState
+          & $auditScript `
+            report `
+            -StateRoot $secondAuditState
+
           if (@($secondApply | Select-String -SimpleMatch 'already installed').Count -ne 2) {
             throw 'Second apply reinstalled a managed font'
           }
