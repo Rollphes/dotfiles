@@ -7,6 +7,7 @@ local function windows_paths()
   local home = msys2_root .. '\\home\\' .. username
 
   return {
+    home = home,
     config = home .. '\\.config',
     data = home .. '\\.local\\share',
     state = home .. '\\.local\\state',
@@ -18,13 +19,16 @@ local function windows_native_tool_environment()
   local paths = windows_paths()
 
   return {
+    HOME = paths.home,
+    APPDATA = paths.home .. '\\.winprofile\\AppData\\Roaming',
+    LOCALAPPDATA = paths.home .. '\\.winprofile\\AppData\\Local',
     XDG_CONFIG_HOME = paths.config,
     XDG_DATA_HOME = paths.data,
     XDG_STATE_HOME = paths.state,
     XDG_CACHE_HOME = paths.cache,
     TEMP = msys2_root .. '\\tmp',
     TMP = msys2_root .. '\\tmp',
-    GHQ_ROOT = home .. '\\ghq',
+    GHQ_ROOT = paths.home .. '\\ghq',
     MISE_CONFIG_DIR = paths.config .. '\\mise',
     MISE_DATA_DIR = paths.data .. '\\mise',
     MISE_STATE_DIR = paths.state .. '\\mise',
@@ -33,6 +37,10 @@ local function windows_native_tool_environment()
     AUBE_CACHE_DIR = paths.cache .. '\\aube',
     AUBE_STORE_DIR = paths.data .. '\\aube\\store',
     ATUIN_CONFIG_DIR = paths.config .. '\\atuin',
+    UV_CACHE_DIR = paths.cache .. '\\uv',
+    UV_TOOL_DIR = paths.data .. '\\uv\\tools',
+    UV_PYTHON_INSTALL_DIR = paths.data .. '\\uv\\python',
+    _ZO_DATA_DIR = paths.data .. '\\zoxide',
   }
 end
 
