@@ -1,0 +1,88 @@
+function __pj_list_projects
+    set -l exception_roots $argv
+
+    if not set -q exception_roots[1]
+{{ if eq .chezmoi.os "windows" -}}
+        set exception_roots "$USERPROFILE/Documents/UnityProject/av-kaihenkai-v2"
+{{ end -}}
+    end
+
+    set -l projects
+
+    if command -q ghq
+        set -a projects (ghq list --full-path 2>/dev/null)
+    end
+
+    if command -q fd
+        for root in $exception_roots
+            if not test -d "$root"
+                continue
+            end
+
+            for git_entry in (fd --hidden --no-ignore --type directory --type file --glob .git --prune "$root" 2>/dev/null)
+                set -a projects (path dirname "$git_entry")
+            end
+        end
+    end
+
+    set -l seen
+    for project in $projects
+        if not test -d "$project"
+            continue
+        end
+
+        set -l resolved (path resolve "$project" 2>/dev/null)
+        if test -z "$resolved"
+            continue
+        end
+
+        set -l key "$resolved"
+        if set -q MSYSTEM
+            set key (string lower "$key")
+        end
+
+        if contains -- "$key" $seen
+            continue
+        end
+
+        set -a seen "$key"
+        printf '%s\n' "$resolved"
+    end
+end
+
+function pj
+    if not command -q ghq
+        echo 'pj: ghq is not available' >&2
+        return 1
+    end
+
+    if not command -q fzf
+        echo 'pj: fzf is not available' >&2
+        return 1
+    end
+
+    set -l projects (__pj_list_projects)
+    if not set -q projects[1]
+        echo 'pj: no repositories found' >&2
+        return 0
+    end
+
+    set -l selected (printf '%s\n' $projects | fzf \
+        --height=80% \
+        --layout=reverse \
+        --border \
+        --prompt='Project> ' \
+        --preview='git -C {} status --short --branch 2>/dev/null || true' \
+        --preview-window='right,60%')
+
+    if test $status -ne 0 -o -z "$selected"
+        return 0
+    end
+
+    if not test -d "$selected"
+        echo "pj: repository no longer exists: $selected" >&2
+        return 1
+    end
+
+    cd "$selected"
+end
