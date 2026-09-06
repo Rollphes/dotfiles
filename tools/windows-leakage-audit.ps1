@@ -383,6 +383,9 @@ function Test-ProcMonConfig {
         'SetDispositionInformationFile',
         'SetBasicInformationFile'
     )
+    if ($rules.Count -ne $MonitoredRoots.Count + $requiredOperations.Count) {
+        throw 'ProcMon configuration contains unexpected filter rules.'
+    }
     $operationIncludes = @($rules | Where-Object { $_.column -eq 40055 -and $_.action -eq 1 })
     if ($operationIncludes.Count -ne $requiredOperations.Count) {
         throw 'ProcMon configuration contains an unexpected Operation include rule.'
@@ -766,13 +769,14 @@ switch ($Command) {
         $metadata = Read-JsonFile $metadataPath
         if ($metadata.status -ne 'running') { throw "Audit session is not running: $sessionDirectory" }
 
+        $after = New-Snapshot $metadata.quarantineRoot (Join-Path $sessionDirectory 'after.json')
+
         $warnings = [Collections.Generic.List[string]]::new()
         $warning = Stop-ProcMonCapture $metadata
         if ($warning) { $warnings.Add($warning) }
         $warning = Export-ProcMonCsv $metadata
         if ($warning) { $warnings.Add($warning) }
 
-        $after = New-Snapshot $metadata.quarantineRoot (Join-Path $sessionDirectory 'after.json')
         $before = Read-JsonFile (Join-Path $sessionDirectory 'before.json')
         $diff = Compare-Snapshots $before $after
         Write-JsonFile $diff (Join-Path $sessionDirectory 'diff.json')
