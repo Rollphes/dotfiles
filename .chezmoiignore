@@ -1,3 +1,6 @@
 README.md
 docs/**
 .github/**
+{{ if ne .chezmoi.os "windows" }}
+.local/bin/hunk.cmd
+{{ end }}

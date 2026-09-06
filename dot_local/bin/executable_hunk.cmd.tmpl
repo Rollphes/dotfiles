@@ -1,0 +1,25 @@
+@echo off
+setlocal
+
+set "CANONICAL_HOME={{ .chezmoi.homeDir }}"
+set "XDG_CONFIG_HOME=%CANONICAL_HOME%\.config"
+set "XDG_DATA_HOME=%CANONICAL_HOME%\.local\share"
+set "XDG_STATE_HOME=%CANONICAL_HOME%\.local\state"
+set "XDG_CACHE_HOME=%CANONICAL_HOME%\.cache"
+set "MISE_CONFIG_DIR=%XDG_CONFIG_HOME%\mise"
+set "MISE_DATA_DIR=%XDG_DATA_HOME%\mise"
+set "MISE_STATE_DIR=%XDG_STATE_HOME%\mise"
+set "MISE_CACHE_DIR=%XDG_CACHE_HOME%\mise"
+set "MISE_TMP_DIR=%XDG_CACHE_HOME%\mise\tmp"
+set "AUBE_CACHE_DIR=%XDG_CACHE_HOME%\aube"
+set "AUBE_STORE_DIR=%XDG_DATA_HOME%\aube\store"
+set "HUNK_TEMP=%XDG_CACHE_HOME%\hunk\tmp"
+if not exist "%HUNK_TEMP%" mkdir "%HUNK_TEMP%" || exit /b 1
+set "TEMP=%HUNK_TEMP%"
+set "TMP=%HUNK_TEMP%"
+
+for /f "usebackq delims=" %%I in (`mise which hunk`) do set "HUNK_EXECUTABLE=%%I"
+if not defined HUNK_EXECUTABLE exit /b 1
+
+"%HUNK_EXECUTABLE%" %*
+exit /b %ERRORLEVEL%
