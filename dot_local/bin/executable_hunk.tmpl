@@ -1,0 +1,11 @@
+#!/bin/sh
+
+set -eu
+
+hunk_temp='{{ .chezmoi.homeDir }}/.cache/hunk/tmp'
+mkdir -p "$hunk_temp"
+export BUN_TMPDIR="$hunk_temp"
+export TEMP="$hunk_temp"
+export TMP="$hunk_temp"
+
+exec '{{ .chezmoi.homeDir }}/.local/share/mise/shims/hunk.exe' "$@"
