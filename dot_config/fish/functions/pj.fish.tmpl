@@ -1,52 +1,35 @@
 function __pj_inventory
-    set -l exception_roots $argv
+    set -l exception_repositories $argv
 
-    if not set -q exception_roots[1]
+    if not set -q exception_repositories[1]
 {{ if eq .chezmoi.os "windows" -}}
-        set exception_roots "$USERPROFILE/Documents/UnityProject/av-kaihenkai-v2"
+        set exception_repositories "$USERPROFILE/Documents/UnityProject/av-kaihenkai-v2"
 {{ end -}}
     end
 
     set -l candidates
 
-    if command -q zoxide
-        for entry in (zoxide query --list --score 2>/dev/null)
-            set -l score (string match -r '^\s*[0-9]+(?:\.[0-9]+)?' -- "$entry" | string trim)
-            set -l directory (string replace -r '^\s*[0-9]+(?:\.[0-9]+)?\s+' '' -- "$entry")
-            set -l repository (git -C "$directory" rev-parse --show-toplevel 2>/dev/null)
-
-            if test -n "$score" -a -n "$repository"
-                set -a candidates (string join \t -- "$score" zoxide "$repository")
-            end
-        end
-    end
-
     if command -q ghq
         for repository in (ghq list --full-path 2>/dev/null)
-            set -a candidates (string join \t -- 0 ghq "$repository")
+            set -a candidates (string join \t -- ghq "$repository")
         end
     end
 
-    if command -q fd
-        for root in $exception_roots
-            if not test -d "$root"
-                continue
-            end
-
-            for git_entry in (fd --hidden --no-ignore --type directory --type file --glob .git --prune "$root" 2>/dev/null)
-                set -a candidates (string join \t -- 0 exception (path dirname "$git_entry"))
-            end
+    for repository in $exception_repositories
+        if test -d "$repository"; and test -e "$repository/.git"
+            set -a candidates (string join \t -- exception "$repository")
         end
     end
 
-    set -l seen
+    set -l inventory_keys
+    set -l inventory_sources
+    set -l inventory_paths
     for candidate in $candidates
         set -l fields (string split \t -- "$candidate")
-        set -l score $fields[1]
-        set -l source $fields[2]
-        set -l project $fields[3]
+        set -l source $fields[1]
+        set -l project $fields[2]
 
-        if not test -d "$project"
+        if not test -d "$project"; or not test -e "$project/.git"
             continue
         end
 
@@ -58,14 +41,75 @@ function __pj_inventory
         set -l key "$resolved"
         if set -q MSYSTEM
             set key (string lower "$key")
+            set key (string replace -r '^/c/msys64/home/' '/home/' -- "$key")
         end
 
-        if contains -- "$key" $seen
+        if contains -- "$key" $inventory_keys
             continue
         end
 
-        set -a seen "$key"
-        printf '%s\t%s\t%s\n' "$score" "$source" "$resolved"
+        set -a inventory_keys "$key"
+        set -a inventory_sources "$source"
+        set -a inventory_paths "$resolved"
+    end
+
+    set -l ranked_keys
+    if command -q zoxide
+        for entry in (zoxide query --list --score 2>/dev/null)
+            set -l score (string match -r '^\s*[0-9]+(?:\.[0-9]+)?' -- "$entry" | string trim)
+            set -l directory (string replace -r '^\s*[0-9]+(?:\.[0-9]+)?\s+' '' -- "$entry")
+
+            if test -z "$score"; or not test -d "$directory"
+                continue
+            end
+
+            set -l directory_key (path resolve "$directory" 2>/dev/null)
+            if test -z "$directory_key"
+                continue
+            end
+
+            if set -q MSYSTEM
+                set directory_key (string lower "$directory_key")
+                set directory_key (string replace -r '^/c/msys64/home/' '/home/' -- "$directory_key")
+            end
+
+            set -l match_index 0
+            set -l match_length 0
+            set -l index 1
+            for repository_key in $inventory_keys
+                set -l repository_prefix "$repository_key/"
+                set -l prefix_length (string length "$repository_prefix")
+                set -l matches false
+
+                if test "$directory_key" = "$repository_key"
+                    set matches true
+                else if test (string length "$directory_key") -ge $prefix_length
+                    if test (string sub -s 1 -l $prefix_length -- "$directory_key") = "$repository_prefix"
+                        set matches true
+                    end
+                end
+
+                if test "$matches" = true -a (string length "$repository_key") -gt $match_length
+                    set match_index $index
+                    set match_length (string length "$repository_key")
+                end
+
+                set index (math $index + 1)
+            end
+
+            if test $match_index -gt 0; and not contains -- "$inventory_keys[$match_index]" $ranked_keys
+                set -a ranked_keys "$inventory_keys[$match_index]"
+                printf '%s\t%s\t%s\n' "$score" "$inventory_sources[$match_index]" "$inventory_paths[$match_index]"
+            end
+        end
+    end
+
+    set -l index 1
+    for repository_key in $inventory_keys
+        if not contains -- "$repository_key" $ranked_keys
+            printf '0\t%s\t%s\n' "$inventory_sources[$index]" "$inventory_paths[$index]"
+        end
+        set index (math $index + 1)
     end
 end
 
@@ -97,12 +141,10 @@ function pj
         set -l display
 
         switch $source
-            case zoxide
-                set display (printf '󰅐 %5s  %s/%s' "$score" "$owner" "$name")
             case ghq
-                set display (printf '󰊢     -  %s/%s' "$owner" "$name")
+                set display (printf '󰊢 %5s  %s/%s' "$score" "$owner" "$name")
             case exception
-                set display (printf '󰉋     -  %s/%s' "$owner" "$name")
+                set display (printf '󰉋 %5s  %s/%s' "$score" "$owner" "$name")
         end
 
         set -a choices "$display\t$project"
@@ -122,7 +164,7 @@ function pj
         --with-nth=1 \
         --accept-nth=2 \
         --prompt='Project> ' \
-        --header='󰅐 zoxide  󰊢 ghq  󰉋 exception' \
+        --header='󰊢 ghq  󰉋 exception  score: zoxide frecency' \
         --with-shell="$preview_shell -c" \
         --preview='__pj_preview {2}' \
         --preview-window='right,60%')
