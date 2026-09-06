@@ -15,9 +15,6 @@
 [init]
     defaultBranch = main
 
-[ghq]
-    root = ~/ghq
-
 {{ if eq .chezmoi.os "windows" -}}
 {{ $msysHome := .chezmoi.homeDir | replace "C:/" "/c/" -}}
 [http]
