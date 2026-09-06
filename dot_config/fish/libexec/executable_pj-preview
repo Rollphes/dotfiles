@@ -1,0 +1,34 @@
+#!/bin/sh
+
+repository=$1
+
+if [ ! -d "$repository" ]; then
+    printf '󰅖  Repository not found\n%s\n' "$repository"
+    exit 0
+fi
+
+printf '󰉋  PROJECT\n'
+printf '%s\n' "${repository##*/}"
+printf '%s\n\n' "$repository"
+
+if ! git_status=$(LC_ALL=C.UTF-8 git -c core.quotepath=false -C "$repository" status --short --branch 2>/dev/null); then
+    printf '󰊢  STATUS\n'
+    printf '󰅖  Unavailable\n'
+    exit 0
+fi
+
+printf '%s\n' "$git_status" | {
+    IFS= read -r branch
+    printf '  BRANCH\n'
+    printf '%s\n\n' "${branch#\#\# }"
+
+    printf '󰊢  CHANGES\n'
+    if IFS= read -r change; then
+        printf '%s\n' "$change"
+        while IFS= read -r change; do
+            printf '%s\n' "$change"
+        done
+    else
+        printf '󰄬  Clean\n'
+    fi
+}

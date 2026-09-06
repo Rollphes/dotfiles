@@ -150,7 +150,7 @@ function pj
         set -a choices "$display\t$project"
     end
 
-    set -l preview_shell (command -s fish)
+    set -l preview_shell (command -s sh)
     if set -q MSYSTEM
         set preview_shell (cygpath -w "$preview_shell")
     end
@@ -164,10 +164,11 @@ function pj
         --with-nth=1 \
         --accept-nth=2 \
         --prompt='Project> ' \
-        --header='󰊢 ghq  󰉋 exception  score: zoxide frecency' \
+        --header='󰊢 ghq  󰉋 exception  score: zoxide frecency  Ctrl+P: preview' \
         --with-shell="$preview_shell -c" \
-        --preview='__pj_preview {2}' \
-        --preview-window='right,60%')
+        --preview='"$XDG_CONFIG_HOME/fish/libexec/pj-preview" {2}' \
+        --preview-window='right,60%,hidden' \
+        --bind='ctrl-p:toggle-preview')
 
     if test $status -ne 0 -o -z "$selected"
         return 0
