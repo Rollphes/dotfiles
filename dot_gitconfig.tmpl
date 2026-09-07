@@ -16,7 +16,7 @@
     defaultBranch = main
 
 {{ if eq .chezmoi.os "windows" -}}
-{{ $msysHome := .chezmoi.homeDir | replace "C:/" "/c/" -}}
+{{ $msysHome := .chezmoi.destDir | replace "C:/" "/c/" -}}
 [http]
     sslBackend = openssl
 
@@ -30,9 +30,9 @@
 {{ else -}}
 [credential "https://github.com"]
     helper =
-    helper = !'{{ .chezmoi.homeDir }}/.local/share/mise/shims/gh' auth git-credential
+    helper = !'{{ .chezmoi.destDir }}/.local/share/mise/shims/gh' auth git-credential
 
 [credential "https://gist.github.com"]
     helper =
-    helper = !'{{ .chezmoi.homeDir }}/.local/share/mise/shims/gh' auth git-credential
+    helper = !'{{ .chezmoi.destDir }}/.local/share/mise/shims/gh' auth git-credential
 {{ end -}}

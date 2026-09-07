@@ -1,3 +1,7 @@
+{{- if eq .chezmoi.os "windows" }}
+# Native callers may supply the Windows profile as HOME; the destination is canonical.
+export HOME="$(cygpath -u "{{ .chezmoi.destDir }}")"
+{{- end }}
 export XDG_CONFIG_HOME="$HOME/.config"
 export XDG_DATA_HOME="$HOME/.local/share"
 export XDG_STATE_HOME="$HOME/.local/state"

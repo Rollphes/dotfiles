@@ -127,7 +127,7 @@ require_developer_mode() {
 }
 
 # Keep filesystem operations in the MSYS2 POSIX namespace.
-msys_home=$(cygpath -u "{{ .chezmoi.homeDir }}")
+msys_home=$(cygpath -u "{{ .chezmoi.destDir }}")
 
 [ -n "${USERPROFILE:-}" ] ||
     fail "USERPROFILE is not set"

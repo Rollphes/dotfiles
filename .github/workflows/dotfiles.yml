@@ -180,7 +180,45 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          chezmoi --source $env:GITHUB_WORKSPACE init --apply --no-tty
+          chezmoi --source $env:GITHUB_WORKSPACE init --no-tty
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $configPath = Join-Path $env:XDG_CONFIG_HOME 'chezmoi\chezmoi.toml'
+          if (-not (Test-Path -LiteralPath $configPath -PathType Leaf)) {
+            throw "chezmoi config is missing: $configPath"
+          }
+
+          $env:HOME = $env:USERPROFILE
+          $env:TEMP = Join-Path $env:USERPROFILE 'AppData\Local\Temp'
+          $env:TMP = $env:TEMP
+          foreach ($name in @(
+            'XDG_CONFIG_HOME',
+            'XDG_DATA_HOME',
+            'XDG_STATE_HOME',
+            'XDG_CACHE_HOME',
+            'GHQ_ROOT',
+            'MISE_CONFIG_DIR',
+            'MISE_DATA_DIR',
+            'MISE_STATE_DIR',
+            'MISE_CACHE_DIR',
+            'MISE_TMP_DIR',
+            'AUBE_CACHE_DIR',
+            'AUBE_STORE_DIR',
+            'ATUIN_CONFIG_DIR',
+            'UV_CACHE_DIR',
+            'UV_TOOL_DIR',
+            'UV_PYTHON_INSTALL_DIR',
+            '_ZO_DATA_DIR'
+          )) {
+            [Environment]::SetEnvironmentVariable($name, $null, 'Process')
+          }
+
+          chezmoi `
+            --config $configPath `
+            --source $env:GITHUB_WORKSPACE `
+            apply `
+            --no-tty
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Report Windows first-apply leakage
         if: always() && runner.os == 'Windows'

@@ -3,8 +3,8 @@ if not command -q starship
 end
 
 {{ if eq .chezmoi.os "windows" -}}
-set -gx STARSHIP_CONFIG "{{ .chezmoi.homeDir }}/.config/starship.toml"
-set -gx STARSHIP_CACHE "{{ .chezmoi.homeDir }}/.cache/starship"
+set -gx STARSHIP_CONFIG "{{ .chezmoi.destDir }}/.config/starship.toml"
+set -gx STARSHIP_CACHE "{{ .chezmoi.destDir }}/.cache/starship"
 {{ else -}}
 set -gx STARSHIP_CONFIG "$XDG_CONFIG_HOME/starship.toml"
 set -gx STARSHIP_CACHE "$XDG_CACHE_HOME/starship"
