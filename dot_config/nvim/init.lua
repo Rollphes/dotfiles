@@ -1,3 +1,5 @@
-require('options')
-require('keymaps')
-require('highlights')
+require("options")
+require("keymaps")
+require("packages")
+require("theme")
+require("plugins.indent_blankline")
