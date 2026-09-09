@@ -1,1 +1,1 @@
-require('indent').tabs(4)
+require('indent').tabs(8)
