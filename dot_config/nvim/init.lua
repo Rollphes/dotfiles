@@ -1,5 +1,6 @@
 require("options")
 require("keymaps")
+require("autocmds")
 require("packages")
 require("theme")
 require("plugins.indent_blankline")
