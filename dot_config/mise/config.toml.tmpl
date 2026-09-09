@@ -11,7 +11,9 @@ fzf = "latest"
 zoxide = "latest"
 "aqua:lsd-rs/lsd" = "latest"
 "aqua:sxyazi/yazi" = "latest"
+{{ if ne .chezmoi.os "windows" -}}
 "aqua:atuinsh/atuin" = "latest"
+{{ end -}}
 
 "aqua:babarot/gomi" = "latest"
 "aqua:bootandy/dust" = "latest"
