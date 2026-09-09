@@ -110,15 +110,6 @@ symbol = ""
 style = "bg:#2d3748"
 format = '[[ $symbol ($version) ](fg:#addc10 bg:#2d3748)]($style)'
 
-[custom.typescript]
-symbol = "󰛦"
-style = "bg:#2d3748"
-shell = ["sh"]
-detect_files = ['tsconfig.json']
-format = '[[ $symbol ($output) ](fg:#addc10 bg:#2d3748)]($style)'
-ignore_timeout = true
-command = '''v=$(grep -m1 '"version"' node_modules/typescript/package.json | grep -oP '[\d.]+' | tr -d '\r'); cache=/tmp/starship_ts_$v; if [ ! -f "$cache" ]; then rm -f /tmp/starship_ts_*; echo "v$v" > "$cache"; fi; cat "$cache"'''
-
 [rust]
 symbol = ""
 style = "bg:#2d3748"
