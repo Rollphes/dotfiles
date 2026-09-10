@@ -11,6 +11,7 @@ component="packages"
 packages="
 fish
 mingw-w64-ucrt-x86_64-curl
+mingw-w64-ucrt-x86_64-gcc
 mingw-w64-ucrt-x86_64-git
 mingw-w64-ucrt-x86_64-git-lfs
 mingw-w64-ucrt-x86_64-atuin
@@ -66,7 +67,7 @@ for package in $packages; do
     console_status "OK" "$package" "pkg" "installed"
 done
 {{ else if eq .chezmoi.os "linux" -}}
-packages="ca-certificates curl fish fontconfig git git-lfs gnupg openssh-client unzip"
+packages="ca-certificates curl fish fontconfig git git-lfs gnupg openssh-client unzip build-essential"
 
 console_header "$component" "Install required packages"
 console_context "APT"
