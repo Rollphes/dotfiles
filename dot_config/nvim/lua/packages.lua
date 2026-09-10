@@ -2,4 +2,6 @@ vim.pack.add({
     { src = "https://github.com/rebelot/kanagawa.nvim" },
     { src = "https://github.com/lukas-reineke/indent-blankline.nvim" },
     { src = "https://github.com/nvim-treesitter/nvim-treesitter" },
+    { src = "https://github.com/ibhagwan/fzf-lua" },
+    { src = "https://github.com/neovim/nvim-lspconfig"},
 })

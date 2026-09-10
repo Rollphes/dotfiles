@@ -3,5 +3,8 @@ require("keymaps")
 require("autocmds")
 require("packages")
 require("theme")
+
 require("plugins.indent_blankline")
 require("plugins.treesitter")
+require("plugins.fzf_lua")
+require("plugins.lsp")
