@@ -69,7 +69,10 @@ neovim = "latest"
 "npm:typescript-language-server" = "latest"
 "npm:vscode-langservers-extracted" = "latest"
 "npm:@vue/language-server" = "latest"
-"npm:svelte-language-server" = "latest"
+"npm:svelte-language-server" = {
+    version = "latest",
+    trust_policy_excludes = ["svelte@4.2.20"]
+}
 "npm:yaml-language-server" = "latest"
 "npm:bash-language-server" = "latest"
 "npm:intelephense" = "latest"
