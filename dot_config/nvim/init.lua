@@ -4,6 +4,7 @@ require("autocmds")
 require("packages")
 require("theme")
 
+require("plugins.auto_session")
 require("plugins.indent_blankline")
 require("plugins.treesitter")
 require("plugins.fzf_lua")
