@@ -53,6 +53,10 @@ vim.opt.completeopt = { "menu", "popup" }
 vim.opt.pumheight = 0
 vim.opt.pumblend = 0
 
+vim.opt.wildmenu = true
+vim.opt.wildmode = { "longest:full", "full" }
+vim.opt.wildoptions = { "pum" }
+
 vim.opt.updatetime = 4000
 vim.opt.timeout = true
 vim.opt.timeoutlen = 1000
