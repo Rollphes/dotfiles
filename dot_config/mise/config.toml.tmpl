@@ -3,9 +3,13 @@
 # Programming languages
 node = "lts"
 go = "latest"
+python = "latest"
+
+# Package managers
+pnpm = "latest"
+uv = "latest"
 
 # CLI tooling
-
 "aqua:starship/starship" = "latest"
 "aqua:carapace-sh/carapace-bin" = "latest"
 fd = "latest"
@@ -21,50 +25,41 @@ zoxide = "latest"
 "aqua:babarot/gomi" = "latest"
 "aqua:bootandy/dust" = "latest"
 "aqua:boyter/scc" = "latest"
-"aqua:nektos/act" = "latest"
+jq = "latest"
+
+# Platform / system tooling
 {{ if eq .chezmoi.os "windows" -}}
 "github:aristocratos/btop4win" = "latest"
 powershell = "latest"
 {{ else if eq .chezmoi.os "linux" -}}
 "aqua:aristocratos/btop" = "latest"
 {{ end -}}
-hunk = "latest"
 
-# CLI tooling
-
+# Git / project tooling
 "aqua:cli/cli" = "latest"
+"aqua:nektos/act" = "latest"
 ghq = "latest"
+hunk = "latest"
 {{ if ne (env "GITHUB_ACTIONS") "true" -}}
 "cargo:keifu" = "latest"
 {{ end -}}
 
 # AI tooling
-
 "github:herdrdev/herdr" = "latest"
 "npm:@anthropic-ai/claude-code" = { version = "latest", allow_builds = ["@anthropic-ai/claude-code"] }
 "npm:@openai/codex" = "latest"
 "npm:backlog.md" = "latest"
 "pipx:graphifyy" = "latest"
 
-# Package managers
-
-"pnpm" = "latest"
-jq = "latest"
-python = "latest"
-uv = "latest"
-
 # Web tooling
-
 "npm:wrangler" = "latest"
 "aqua:supabase/cli" = "latest"
 
 # Vim / Neovim tooling
-
 neovim = "latest"
 "aqua:tree-sitter/tree-sitter" = "latest"
 
 # LSP / language tooling
-
 "pipx:basedpyright" = "latest"
 "npm:typescript-language-server" = "latest"
 "npm:vscode-langservers-extracted" = "latest"
