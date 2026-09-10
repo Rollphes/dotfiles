@@ -92,6 +92,18 @@ function Get-OSStateExclusions([string] $ProfilePath) {
         Where-Object { [IO.Path]::GetFileName($_) -match '^ntuser\.dat(?:\.LOG[12]|\{[0-9a-f-]{36}\}\.TM(?:\.blf|Container[0-9]+\.regtrans-ms))?$' })
 }
 
+function Get-RunnerStateExclusions([string] $ProfilePath, [string] $LocalPath) {
+    if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted') {
+        return @()
+    }
+    # Observed in GitHub-hosted run 34536176054. These are Windows certificate
+    # and web caches maintained by the runner OS, scoped to their exact roots.
+    return @(
+        (Join-Path $LocalPath 'Microsoft\Windows\WebCache'),
+        (Join-Path $ProfilePath 'AppData\LocalLow\Microsoft\CryptnetUrlCache')
+    )
+}
+
 function Write-JsonFile {
     param([Parameter(Mandatory)] $Value, [Parameter(Mandatory)][string] $Path)
     $Value | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $Path -Encoding utf8
@@ -239,7 +251,8 @@ function New-SnapshotSet {
     New-Item -ItemType Directory -Path $Directory -Force | Out-Null
     foreach ($id in $MonitoredRootIds) {
         $exclusions = @($Metadata.managedBridgeRoots) + @($Metadata.osStateExclusions) +
-            @($Metadata.workspaceRoots) + @($Metadata.roots.canonicalHome, $Metadata.auditStateRoot)
+            @($Metadata.runnerStateExclusions) + @($Metadata.workspaceRoots) +
+            @($Metadata.roots.canonicalHome, $Metadata.auditStateRoot)
         if ($id -eq 'hostProfile') { $exclusions += @($Metadata.roots.local, $Metadata.roots.roaming, $Metadata.roots.temp) }
         if ($id -eq 'local') { $exclusions += $Metadata.roots.temp }
         [AuditSnapshotWriter]::WriteRecursive(
@@ -331,13 +344,14 @@ function New-Report {
     foreach ($path in @($Metadata.managedBridgeRoots)) { $lines.Add("    $path") }
     $lines.Add('OS STATE EXCLUSIONS (observed locked/inaccessible paths)')
     foreach ($path in @($Metadata.osStateExclusions)) { $lines.Add("    $path") }
+    $lines.Add('GITHUB-HOSTED RUNNER OS EXCLUSIONS (observed paths)')
+    foreach ($path in @($Metadata.runnerStateExclusions)) { $lines.Add("    $path") }
     $lines.Add('EXPLICIT WORKSPACE EXCLUSIONS')
     $workspaceProperty = $Metadata.PSObject.Properties['workspaceRoots']
     if ($null -ne $workspaceProperty) {
         foreach ($path in @($workspaceProperty.Value)) { $lines.Add("    $path") }
     }
     $lines.Add("CONTENT HASHING: $($Metadata.hashFiles)")
-    $lines.Add('RUNNER CHURN ALLOWLIST: none')
     $policy = Write-PolicyResult $Metadata $Diffs
     $lines.Add("MANAGED HOST ASSET CHANGES: $(@($policy.managedHostAssets).Count)")
     $lines.Add("POLICY: $($policy.decision) ($(@($policy.violations).Count) forbidden writes)")
@@ -466,9 +480,9 @@ switch ($Command) {
                     # Observed inaccessible Windows performance assessment state.
                     (Join-Path $hostTempPath 'WinSAT')
                 )
-                runnerStateExclusions = @()
+                runnerStateExclusions = @(Get-RunnerStateExclusions $hostProfilePath $hostLocalPath)
                 policy = 'New, modified, metadataOnly host entries fail except manifest-managed fonts and their containers; deleted entries are informational.'
-                exclusions = @('Any .ssh path component before filesystem access', 'Managed bridges and their container metadata', 'Canonical home', 'Audit state', 'Explicit command workspaces')
+                exclusions = @('Any .ssh path component before filesystem access', 'Managed bridges and their container metadata', 'Canonical home', 'Audit state', 'Explicit command workspaces', 'Observed GitHub-hosted runner OS cache roots')
                 environment = [ordered]@{
                     HOME = $env:HOME; USERPROFILE = $env:USERPROFILE; APPDATA = $env:APPDATA
                     LOCALAPPDATA = $env:LOCALAPPDATA; TEMP = $env:TEMP; TMP = $env:TMP

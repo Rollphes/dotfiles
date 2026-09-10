@@ -1,10 +1,20 @@
 [settings.github]
 credential_command = "gh auth token"
 
+{{ if eq .chezmoi.os "windows" -}}
+# sigstore-rust resolves its TUF cache through Windows Known Folders, which
+# cannot follow this process-local development profile without host leakage.
+# Other aqua verification methods remain enabled.
+[settings.aqua]
+github_attestations = false
+
+{{ end -}}
 [tools]
 # Programming languages
 node = "lts"
+{{ if ne (env "GITHUB_ACTIONS") "true" -}}
 go = "latest"
+{{ end -}}
 python = "latest"
 
 # Package managers
@@ -76,5 +86,7 @@ neovim = "latest"
 "npm:fish-lsp" = "latest"
 "lua-language-server" = "latest"
 "taplo" = "latest"
+{{ if ne (env "GITHUB_ACTIONS") "true" -}}
 "go:golang.org/x/tools/gopls" = "latest"
+{{ end -}}
 "marksman" = "latest"

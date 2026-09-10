@@ -189,6 +189,11 @@ profile remain unchanged. Managed bridges still originate in the registered
 Windows login profile. Managed user fonts remain in the registered host Local
 AppData folder. No runtime data is migrated or deleted by this change.
 
+On Windows, mise's aqua GitHub artifact-attestation check is disabled. Its
+sigstore-rust dependency resolves the TUF cache through Windows Known Folders,
+which remain host-owned and cannot follow process-local USERPROFILE without a
+host write. Aqua checksum, SLSA, Cosign and Minisign verification stay enabled.
+
 The audit is part of **STG5 leakage closure**. It records the real host profile
 independently of virtualized USERPROFILE; CI captures the original profile and
 temp once in CI-only variables. Interactive audit defaults to the registered
@@ -206,7 +211,12 @@ existence, metadata, contents or children. Managed bridges, their container
 metadata, canonical home and audit state are excluded. Locked Windows NTUSER
 registry hive, journal and transaction filenames observed during validation are
 separately recorded as OS exclusions, along with the observed inaccessible host
-Temp `WinSAT` directory. There is no development-tool or runner-wide allowlist.
+Temp `WinSAT` directory. On a GitHub-hosted runner only, the two OS cache roots
+observed in run `34536176054` are also excluded:
+`Microsoft\Windows\WebCache` below host Local AppData and
+`AppData\LocalLow\Microsoft\CryptnetUrlCache` below the host profile. The
+exclusions do not apply to self-hosted runners or adjacent paths. There is no
+development-tool or runner-wide allowlist.
 Manifest-managed font filenames and their directory containers are classified as
 managed host assets; the font verification checks their contents and registration.
 
@@ -231,7 +241,9 @@ Go uses its native defaults under the development profile: `go`,
 development Local AppData. No extra Go environment overrides are required by the
 validated resolvers. Runtime probes in `.github/scripts/probe-windows-runtime.ps1`
 exercise the native child environment without reinstalling tools or loading user
-Neovim configuration.
+Neovim configuration. GitHub Actions excludes Go and the `go:*` backend from the
+rendered mise toolset; its runtime probe checks that exclusion and skips only the
+Go/gopls workload while continuing the other containment probes.
 
 MISE variables in this repository use `export` / Fish `set -gx`, not universal
 variables. To inspect a suspected machine-local universal value without changing

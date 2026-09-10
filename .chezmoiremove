@@ -1,2 +1,0 @@
-# Retire only the renamed managed Fish config, never runtime data.
-.config/fish/conf.d/01-windows-quarantine.fish

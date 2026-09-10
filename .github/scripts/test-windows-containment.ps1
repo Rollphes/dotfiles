@@ -34,6 +34,23 @@ Run-Case 'new-unknown-tool' { New-Item -ItemType Directory (Join-Path $hostRoot 
 Run-Case 'host-temp' { Set-Content (Join-Path $hostTemp 'arbitrary-state') 'x' } $true
 Run-Case 'host-roaming' { $dir=Join-Path $hostRoot 'AppData\Roaming\unknown-tool'; New-Item -ItemType Directory $dir -Force | Out-Null; Set-Content (Join-Path $dir 'state') 'x' } $true
 Run-Case 'host-locallow' { $dir=Join-Path $hostRoot 'AppData\LocalLow\unknown-tool'; New-Item -ItemType Directory $dir -Force | Out-Null; Set-Content (Join-Path $dir 'state') 'x' } $true
+$savedGithubActions = $env:GITHUB_ACTIONS
+$savedRunnerEnvironment = $env:RUNNER_ENVIRONMENT
+try {
+    $webCache = Join-Path $hostRoot 'AppData\Local\Microsoft\Windows\WebCache'
+    $env:GITHUB_ACTIONS = 'true'
+    $env:RUNNER_ENVIRONMENT = 'self-hosted'
+    Run-Case 'runner-exclusion-disabled' { New-Item -ItemType Directory $webCache -Force | Out-Null; Set-Content (Join-Path $webCache 'state-1') 'x' } $true
+
+    $env:RUNNER_ENVIRONMENT = 'github-hosted'
+    Run-Case 'runner-webcache' { Set-Content (Join-Path $webCache 'state-2') 'x' } $false
+    $cryptnet = Join-Path $hostRoot 'AppData\LocalLow\Microsoft\CryptnetUrlCache\Content'
+    Run-Case 'runner-cryptnet-cache' { New-Item -ItemType Directory $cryptnet -Force | Out-Null; Set-Content (Join-Path $cryptnet 'state') 'x' } $false
+    Run-Case 'runner-exclusion-sibling' { Set-Content (Join-Path $hostRoot 'AppData\LocalLow\Microsoft\unknown.state') 'x' } $true
+} finally {
+    if ($null -eq $savedGithubActions) { Remove-Item Env:GITHUB_ACTIONS -ErrorAction SilentlyContinue } else { $env:GITHUB_ACTIONS = $savedGithubActions }
+    if ($null -eq $savedRunnerEnvironment) { Remove-Item Env:RUNNER_ENVIRONMENT -ErrorAction SilentlyContinue } else { $env:RUNNER_ENVIRONMENT = $savedRunnerEnvironment }
+}
 Run-Case 'canonical-write' { Set-Content (Join-Path $canonical 'allowed-state') 'x' } $false
 Run-Case 'explicit-workspace' { New-Item -ItemType Directory $fixtureWorkspace -Force | Out-Null; Set-Content (Join-Path $fixtureWorkspace 'source') 'x' } $false
 Run-Case 'workspace-sibling' { New-Item -ItemType Directory (Join-Path $hostRoot 'project-other') | Out-Null } $true

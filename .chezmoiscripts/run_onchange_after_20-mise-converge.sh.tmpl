@@ -24,6 +24,12 @@ console_status "OK" "mise" "tool" "available"
 
 if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
     console_status "SKIP" "cargo:*" "backend" "excluded in CI"
+    console_status "SKIP" "go, go:*" "backend" "excluded in CI"
+    if grep -Eq '^(go[[:space:]]*=|"go:[^"]+"[[:space:]]*=)' "$XDG_CONFIG_HOME/mise/config.toml"; then
+        console_status "ERROR" "go, go:*" "backend" "present in CI toolset"
+        console_failed "$component"
+        exit 1
+    fi
 fi
 
 (

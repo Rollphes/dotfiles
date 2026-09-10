@@ -41,9 +41,22 @@ if ([IO.Path]::GetTempPath().TrimEnd('\') -ine 'C:\msys64\tmp') { throw 'PowerSh
 Assert-Contained 'powershell.home' $PSHOME
 Write-Output "powershell.version=$($PSVersionTable.PSVersion)"
 
-$go = (Invoke-Probe go @('env','-json','GOPATH','GOCACHE','GOENV','GOMODCACHE','GOTMPDIR','GOROOT')) -join "`n" | ConvertFrom-Json
-foreach ($name in 'GOPATH','GOCACHE','GOENV','GOMODCACHE','GOROOT') { Assert-Contained "go.$name" $go.$name }
-if ($go.GOTMPDIR -and (Native-Path $go.GOTMPDIR) -ine 'C:\msys64\tmp') { throw 'Go GOTMPDIR escaped' }
+$ciToolset = $env:GITHUB_ACTIONS -eq 'true'
+if ($ciToolset) {
+    $miseConfigPath = Join-Path $env:MISE_CONFIG_DIR 'config.toml'
+    $miseConfig = Get-Content -LiteralPath $miseConfigPath -Raw
+    if ($miseConfig -match '(?m)^\s*go\s*=' -or $miseConfig -match '(?m)^\s*"go:[^"]+"\s*=') {
+        throw 'Go or go backend tools must be excluded from the CI mise config'
+    }
+    if ($miseConfig -notmatch '(?ms)^\[settings\.aqua\]\s+github_attestations\s*=\s*false\b') {
+        throw 'Windows CI mise config must disable aqua GitHub attestations'
+    }
+    Write-Output 'go/gopls=SKIP (excluded from CI toolset)'
+} else {
+    $go = (Invoke-Probe go @('env','-json','GOPATH','GOCACHE','GOENV','GOMODCACHE','GOTMPDIR','GOROOT')) -join "`n" | ConvertFrom-Json
+    foreach ($name in 'GOPATH','GOCACHE','GOENV','GOMODCACHE','GOROOT') { Assert-Contained "go.$name" $go.$name }
+    if ($go.GOTMPDIR -and (Native-Path $go.GOTMPDIR) -ine 'C:\msys64\tmp') { throw 'Go GOTMPDIR escaped' }
+}
 Assert-Contained 'npm.cache' ((Invoke-Probe npm @('config','get','cache')) -join '').Trim()
 $pnpmStore = ((Invoke-Probe pnpm @('store','path')) -join '').Trim()
 # pnpm may use a project-local store; the current workspace is an allowed target.
@@ -60,15 +73,18 @@ $python = ((Invoke-Probe python @('-B','-c','import json,os,tempfile; print(json
 Assert-Contained 'python.home' $python.home
 if ((Native-Path $python.tmp) -ine 'C:\msys64\tmp') { throw 'Python temp escaped' }
 # These exercise installed executables without downloads, credentials, or user init.
-foreach ($tool in 'chezmoi','mise','go','node','npm','pnpm','uv','cargo','rustup','rustc','git','gh','ghq','tree-sitter') {
+$versionTools = @('chezmoi','mise','node','npm','pnpm','uv','cargo','rustup','rustc','git','gh','ghq','tree-sitter')
+if (-not $ciToolset) { $versionTools += 'go' }
+foreach ($tool in $versionTools) {
     $arguments = if ($tool -eq 'go') { @('version') } else { @('--version') }
     Invoke-Probe $tool $arguments
 }
-Invoke-Probe gopls @('version')
+if (-not $ciToolset) { Invoke-Probe gopls @('version') }
 $nvimPaths = ((Invoke-Probe nvim @('--headless','-u','NONE','-i','NONE','-n','-c','lua local p = {}; for _,k in ipairs({"config","data","state","cache"}) do p[k] = vim.fn.stdpath(k) end; io.stdout:write(vim.json.encode(p))','-c','qa')) -join '') | ConvertFrom-Json
 foreach ($name in 'config','data','state','cache') { Assert-Contained "nvim.$name" $nvimPaths.$name }
 
-# Minimal offline workloads exercise gopls's Go subprocess and parser compilation.
+# Minimal offline workloads exercise parser compilation and, outside CI, gopls's
+# Go subprocess. Go/gopls are intentionally omitted from the CI toolset.
 $fixture = Join-Path $env:TEMP ('containment-runtime-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory $fixture | Out-Null
 $savedGoProxy = $env:GOPROXY
@@ -76,17 +92,19 @@ $savedGoToolchain = $env:GOTOOLCHAIN
 $savedGoWork = $env:GOWORK
 Push-Location $fixture
 try {
-    $env:GOPROXY = 'off'
-    $env:GOTOOLCHAIN = 'local'
-    $env:GOWORK = 'off'
-    "module containment.invalid/probe`n`ngo 1.20`n" | Set-Content go.mod
-    'package probe; func Answer() int { return 42 }' | Set-Content probe.go
-    Invoke-Probe go @('list','.')
-    $goplsCheck = @(& gopls check probe.go 2>&1)
-    if ($LASTEXITCODE -ne 0 -or ($goplsCheck -join "`n") -match 'Error:|initial workspace load failed') {
-        throw "gopls Go runtime probe failed: $($goplsCheck -join "`n")"
+    if (-not $ciToolset) {
+        $env:GOPROXY = 'off'
+        $env:GOTOOLCHAIN = 'local'
+        $env:GOWORK = 'off'
+        "module containment.invalid/probe`n`ngo 1.20`n" | Set-Content go.mod
+        'package probe; func Answer() int { return 42 }' | Set-Content probe.go
+        Invoke-Probe go @('list','.')
+        $goplsCheck = @(& gopls check probe.go 2>&1)
+        if ($LASTEXITCODE -ne 0 -or ($goplsCheck -join "`n") -match 'Error:|initial workspace load failed') {
+            throw "gopls Go runtime probe failed: $($goplsCheck -join "`n")"
+        }
+        $goplsCheck
     }
-    $goplsCheck
     'module.exports = grammar({name: "containment_probe", rules: {source_file: $ => repeat($.word), word: $ => /[a-z]+/}});' | Set-Content grammar.js
     '{"parser-directories": []}' | Set-Content parser-config.json
     'hello' | Set-Content example.txt

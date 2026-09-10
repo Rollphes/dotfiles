@@ -46,10 +46,16 @@ jobs:
         shell: pwsh
         run: |
           # Capture host authority once, before process profile virtualization.
-          "DOTFILES_CI_HOST_PROFILE=$env:USERPROFILE" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
-          "DOTFILES_CI_HOST_LOCALAPPDATA=$env:LOCALAPPDATA" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
-          "DOTFILES_CI_HOST_APPDATA=$env:APPDATA" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
-          "DOTFILES_CI_HOST_TEMP=$env:TEMP" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          $hostProfile = $env:USERPROFILE
+          $hostLocalAppData = $env:LOCALAPPDATA
+          $hostRoamingAppData = $env:APPDATA
+          # Runner TEMP uses an 8.3 alias; use the equivalent long path so the
+          # Local snapshot can exclude the independently monitored Temp root.
+          $hostTemp = Join-Path $hostLocalAppData 'Temp'
+          "DOTFILES_CI_HOST_PROFILE=$hostProfile" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "DOTFILES_CI_HOST_LOCALAPPDATA=$hostLocalAppData" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "DOTFILES_CI_HOST_APPDATA=$hostRoamingAppData" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "DOTFILES_CI_HOST_TEMP=$hostTemp" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           $msysHome = "C:\msys64\home\$env:USERNAME"
           $cargoHome = "$msysHome\.cargo"
           $rustupHome = "$msysHome\.rustup"
