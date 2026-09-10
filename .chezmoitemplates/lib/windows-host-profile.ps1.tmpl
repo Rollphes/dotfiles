@@ -1,0 +1,6 @@
+# Resolve the login profile independently of process HOME / USERPROFILE.
+# This reads only profile registration for the current identity, never its files.
+$sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+$profileKey = "Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$sid"
+$registeredProfile = Get-ItemPropertyValue -LiteralPath $profileKey -Name ProfileImagePath -ErrorAction Stop
+[Environment]::ExpandEnvironmentVariables($registeredProfile)

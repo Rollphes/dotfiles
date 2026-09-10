@@ -90,7 +90,7 @@ sudo apt-get install -y wezterm-nightly
 ```
 
 The managed WezTerm configuration launches `/usr/bin/fish --login -i`.
-Linux uses native paths; the Windows environment quarantine and bridge
+Linux uses native paths; the Windows development environment containment and bridge
 scripts do not run.
 
 Start `wezterm` after installation.

@@ -45,6 +45,11 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          # Capture host authority once, before process profile virtualization.
+          "DOTFILES_CI_HOST_PROFILE=$env:USERPROFILE" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "DOTFILES_CI_HOST_LOCALAPPDATA=$env:LOCALAPPDATA" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "DOTFILES_CI_HOST_APPDATA=$env:APPDATA" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "DOTFILES_CI_HOST_TEMP=$env:TEMP" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           $msysHome = "C:\msys64\home\$env:USERNAME"
           $cargoHome = "$msysHome\.cargo"
           $rustupHome = "$msysHome\.rustup"
@@ -54,6 +59,9 @@ jobs:
           $xdgCacheHome = "$msysHome\.cache"
           $msysTemp = 'C:\msys64\tmp'
           New-Item -ItemType Directory -Force -Path $msysHome, $msysTemp | Out-Null
+          "USERPROFILE=$msysHome" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "APPDATA=$msysHome\AppData\Roaming" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "LOCALAPPDATA=$msysHome\AppData\Local" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           "HOME=$msysHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "CARGO_HOME=$cargoHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "RUSTUP_HOME=$rustupHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
@@ -82,29 +90,8 @@ jobs:
           "$msysHome\.local\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
           "$cargoHome\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
 
-          $developerMode = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock'
-          New-Item -Path $developerMode -Force | Out-Null
-          New-ItemProperty `
-            -Path $developerMode `
-            -Name AllowDevelopmentWithoutDevLicense `
-            -PropertyType DWord `
-            -Value 1 `
-            -Force | Out-Null
-
-          foreach ($relativePath in @(
-            '.config\wezterm',
-            '.agents',
-            '.claude',
-            '.codex',
-            '.claude.json',
-            '.gitconfig',
-            '.npmrc'
-          )) {
-            $path = Join-Path $env:USERPROFILE $relativePath
-            if (Test-Path -LiteralPath $path) {
-              Remove-Item -LiteralPath $path -Recurse -Force
-            }
-          }
+          # The runner must already permit symlinks. Never alter registry or
+          # remove conflicting host resources to make bridge checks pass.
 
       - name: Install Windows bootstrap packages
         if: runner.os == 'Windows'
@@ -140,8 +127,8 @@ jobs:
             throw "Expected one mise Windows asset, found $($asset.Count)"
           }
 
-          $archive = Join-Path $env:RUNNER_TEMP 'mise.zip'
-          $extract = Join-Path $env:RUNNER_TEMP 'mise'
+          $archive = Join-Path $env:TEMP 'mise-bootstrap.zip'
+          $extract = Join-Path $env:TEMP 'mise-bootstrap'
           Invoke-WebRequest -Uri $asset[0].browser_download_url -OutFile $archive
           Expand-Archive -LiteralPath $archive -DestinationPath $extract -Force
           foreach ($name in 'mise.exe', 'mise-shim.exe') {
@@ -164,14 +151,21 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $auditScript = Join-Path $env:RUNNER_TEMP 'windows-leakage-audit.ps1'
+          $auditScript = Join-Path $env:TEMP 'windows-leakage-audit.ps1'
           chezmoi `
             --source $env:GITHUB_WORKSPACE `
             execute-template `
             --file .\dot_local\bin\executable_audit.ps1.tmpl `
             --output $auditScript
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & .github/scripts/test-windows-containment.ps1 -AuditScript $auditScript
           & $auditScript `
             start `
+            -HostProfile $env:DOTFILES_CI_HOST_PROFILE `
+            -HostTemp $env:DOTFILES_CI_HOST_TEMP `
+            -HostLocalAppData $env:DOTFILES_CI_HOST_LOCALAPPDATA `
+            -HostRoamingAppData $env:DOTFILES_CI_HOST_APPDATA `
+            -WorkspaceRoots $env:GITHUB_WORKSPACE `
             -StateRoot "$env:HOME\.local\state\dotfiles-leakage-ci\first"
 
       - name: Initialize and apply on Windows
@@ -188,31 +182,8 @@ jobs:
             throw "chezmoi config is missing: $configPath"
           }
 
-          $env:HOME = $env:USERPROFILE
-          $env:TEMP = Join-Path $env:USERPROFILE 'AppData\Local\Temp'
-          $env:TMP = $env:TEMP
-          foreach ($name in @(
-            'XDG_CONFIG_HOME',
-            'XDG_DATA_HOME',
-            'XDG_STATE_HOME',
-            'XDG_CACHE_HOME',
-            'GHQ_ROOT',
-            'MISE_CONFIG_DIR',
-            'MISE_DATA_DIR',
-            'MISE_STATE_DIR',
-            'MISE_CACHE_DIR',
-            'MISE_TMP_DIR',
-            'AUBE_CACHE_DIR',
-            'AUBE_STORE_DIR',
-            'ATUIN_CONFIG_DIR',
-            'UV_CACHE_DIR',
-            'UV_TOOL_DIR',
-            'UV_PYTHON_INSTALL_DIR',
-            '_ZO_DATA_DIR'
-          )) {
-            [Environment]::SetEnvironmentVariable($name, $null, 'Process')
-          }
-
+          # This apply belongs to the development process tree. Keep the
+          # canonical profile contract inherited by chezmoi itself and its children.
           chezmoi `
             --config $configPath `
             --source $env:GITHUB_WORKSPACE `
@@ -220,17 +191,23 @@ jobs:
             --no-tty
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Probe Windows development runtime
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & C:\msys64\usr\bin\fish.exe -c 'pwsh.exe -NoProfile -File .github/scripts/probe-windows-runtime.ps1'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Report Windows first-apply leakage
         if: always() && runner.os == 'Windows'
         shell: pwsh
         run: |
-          $auditScript = Join-Path $env:RUNNER_TEMP 'windows-leakage-audit.ps1'
-          & $auditScript `
-            stop `
-            -StateRoot "$env:HOME\.local\state\dotfiles-leakage-ci\first"
-          & $auditScript `
-            report `
-            -StateRoot "$env:HOME\.local\state\dotfiles-leakage-ci\first"
+          $auditScript = Join-Path $env:TEMP 'windows-leakage-audit.ps1'
+          try {
+            & $auditScript stop -StateRoot "$env:HOME\.local\state\dotfiles-leakage-ci\first"
+          } finally {
+            & $auditScript report -StateRoot "$env:HOME\.local\state\dotfiles-leakage-ci\first"
+          }
           & .github/scripts/verify-windows-containment.ps1 `
             -StateRoot "$env:HOME\.local\state\dotfiles-leakage-ci\first"
 
@@ -303,13 +280,13 @@ jobs:
               "XDG_CONFIG_HOME=$fishConfigHome" `
               'C:\msys64\usr\bin\fish.exe' `
               -c @'
-          printf '%s\n' "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$APPDATA" "$LOCALAPPDATA" "$TEMP" "$TMP" "$GHQ_ROOT" "$MISE_CONFIG_DIR" "$MISE_DATA_DIR" "$MISE_STATE_DIR" "$MISE_CACHE_DIR" "$MISE_TMP_DIR" "$AUBE_CACHE_DIR" "$AUBE_STORE_DIR" "$ATUIN_CONFIG_DIR" "$UV_CACHE_DIR" "$UV_TOOL_DIR" "$UV_PYTHON_INSTALL_DIR" "$_ZO_DATA_DIR"
+          printf '%s\n' "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$APPDATA" "$LOCALAPPDATA" "$TEMP" "$TMP" "$GHQ_ROOT" "$MISE_CONFIG_DIR" "$MISE_DATA_DIR" "$MISE_STATE_DIR" "$MISE_CACHE_DIR" "$MISE_TMP_DIR" "$AUBE_CACHE_DIR" "$AUBE_STORE_DIR" "$ATUIN_CONFIG_DIR" "$UV_CACHE_DIR" "$UV_TOOL_DIR" "$UV_PYTHON_INSTALL_DIR" "$_ZO_DATA_DIR" "$HOME" "$USERPROFILE"
           '@
           )
           $emptyEnvironment = @(
             $fishEnvironment | Where-Object { [string]::IsNullOrWhiteSpace($_) }
           )
-          if ($fishEnvironment.Count -ne 21 -or $emptyEnvironment.Count -ne 0) {
+          if ($fishEnvironment.Count -ne 23 -or $emptyEnvironment.Count -ne 0) {
             throw "Unexpected Fish environment output: $($fishEnvironment.Count) values"
           }
           $expectedEnvironment = @(
@@ -317,8 +294,8 @@ jobs:
             "$env:HOME\.local\share",
             "$env:HOME\.local\state",
             "$env:HOME\.cache",
-            "$env:HOME\.winprofile\AppData\Roaming",
-            "$env:HOME\.winprofile\AppData\Local",
+            "$env:HOME\AppData\Roaming",
+            "$env:HOME\AppData\Local",
             'C:\msys64\tmp',
             'C:\msys64\tmp',
             "$env:HOME\ghq",
@@ -333,15 +310,17 @@ jobs:
             "$env:HOME\.cache\uv",
             "$env:HOME\.local\share\uv\tools",
             "$env:HOME\.local\share\uv\python",
-            "$env:HOME\.local\share\zoxide"
+            "$env:HOME\.local\share\zoxide",
+            $env:HOME,
+            $env:HOME
           ) | ForEach-Object { [IO.Path]::GetFullPath($_) }
           $actualEnvironment = $fishEnvironment | ForEach-Object {
             [IO.Path]::GetFullPath(
               (& 'C:\msys64\usr\bin\cygpath.exe' -w $_)
             )
           }
-          if (Compare-Object $expectedEnvironment $actualEnvironment) {
-            throw 'Fish environment escaped the MSYS2 home quarantine'
+          if (($expectedEnvironment -join "`n") -ine ($actualEnvironment -join "`n")) {
+            throw 'Fish environment escaped the MSYS2 home containment'
           }
 
           $uvCache = [IO.Path]::GetFullPath((uv cache dir).Trim())
@@ -378,8 +357,11 @@ jobs:
             throw "mise install escaped the MSYS2 home: $ghqInstall"
           }
 
-          foreach ($relativePath in '.gitconfig', '.config\wezterm') {
-            $linkPath = Join-Path $env:USERPROFILE $relativePath
+          $bridges = (chezmoi --source $env:GITHUB_WORKSPACE execute-template '{{ .windows.bridges | toJson }}') | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          foreach ($bridge in $bridges) {
+            $relativePath = $bridge.path
+            $linkPath = Join-Path $env:DOTFILES_CI_HOST_PROFILE $relativePath
             $expected = Join-Path $env:HOME $relativePath
             $link = Get-Item -LiteralPath $linkPath -Force
             if ($link.LinkType -ne 'SymbolicLink') {
@@ -407,9 +389,14 @@ jobs:
           }
 
           $secondAuditState = "$env:HOME\.local\state\dotfiles-leakage-ci\second"
-          $auditScript = Join-Path $env:RUNNER_TEMP 'windows-leakage-audit.ps1'
+          $auditScript = Join-Path $env:TEMP 'windows-leakage-audit.ps1'
           & $auditScript `
             start `
+            -HostProfile $env:DOTFILES_CI_HOST_PROFILE `
+            -HostTemp $env:DOTFILES_CI_HOST_TEMP `
+            -HostLocalAppData $env:DOTFILES_CI_HOST_LOCALAPPDATA `
+            -HostRoamingAppData $env:DOTFILES_CI_HOST_APPDATA `
+            -WorkspaceRoots $env:GITHUB_WORKSPACE `
             -StateRoot $secondAuditState
 
           $secondApply = @()
@@ -423,12 +410,11 @@ jobs:
             $secondApplyError = $_
           } finally {
             try {
-              & $auditScript `
-                stop `
-                -StateRoot $secondAuditState
-              & $auditScript `
-                report `
-                -StateRoot $secondAuditState
+              try {
+                & $auditScript stop -StateRoot $secondAuditState
+              } finally {
+                & $auditScript report -StateRoot $secondAuditState
+              }
               & .github/scripts/verify-windows-containment.ps1 `
                 -StateRoot $secondAuditState
             } catch {
@@ -453,3 +439,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if ($diff) { throw "chezmoi diff is not empty`n$diff" }
           if (git status --porcelain) { throw 'Source tree is not clean' }
+
+      - name: Upload Windows leakage audit
+        if: always() && runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-leakage-audit
+          path: ${{ env.HOME }}/.local/state/dotfiles-leakage-ci
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7

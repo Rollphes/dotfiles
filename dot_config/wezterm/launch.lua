@@ -20,8 +20,11 @@ local function windows_native_tool_environment()
 
   return {
     HOME = paths.home,
-    APPDATA = paths.home .. '\\.winprofile\\AppData\\Roaming',
-    LOCALAPPDATA = paths.home .. '\\.winprofile\\AppData\\Local',
+    USERPROFILE = paths.home,
+    CARGO_HOME = paths.home .. '\\.cargo',
+    RUSTUP_HOME = paths.home .. '\\.rustup',
+    APPDATA = paths.home .. '\\AppData\\Roaming',
+    LOCALAPPDATA = paths.home .. '\\AppData\\Local',
     XDG_CONFIG_HOME = paths.config,
     XDG_DATA_HOME = paths.data,
     XDG_STATE_HOME = paths.state,
@@ -44,13 +47,14 @@ local function windows_native_tool_environment()
   }
 end
 
-local function windows_fish_args(include_environment)
-  local args = {}
-
-  if include_environment then
-    table.insert(args, msys2_root .. '\\usr\\bin\\env.exe')
-    table.insert(args, 'MSYSTEM=UCRT64')
-  end
+local function windows_fish_args()
+  local home = '/home/' .. assert(os.getenv 'USERNAME', 'USERNAME is required on Windows')
+  local args = {
+    msys2_root .. '\\usr\\bin\\env.exe',
+    'MSYSTEM=UCRT64',
+    'HOME=' .. home,
+    'XDG_CONFIG_HOME=' .. home .. '/.config',
+  }
 
   table.insert(args, msys2_root .. '\\usr\\bin\\fish.exe')
   table.insert(args, '--login')
@@ -71,13 +75,12 @@ function M.apply(config, wezterm)
   local target = wezterm.target_triple
 
   if target:find('windows') then
-    config.default_prog = windows_fish_args(true)
+    config.default_prog = windows_fish_args()
     config.mux_enable_ssh_agent = false
     config.launch_menu = {
       {
         label = 'MSYS2 UCRT64 Fish',
-        args = windows_fish_args(false),
-        set_environment_variables = { MSYSTEM = 'UCRT64' },
+        args = windows_fish_args(),
       },
       {
         label = 'PowerShell',

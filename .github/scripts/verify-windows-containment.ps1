@@ -1,39 +1,12 @@
-param(
-    [Parameter(Mandatory)]
-    [string] $StateRoot
-)
-
+param([Parameter(Mandatory)][string] $StateRoot)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-
-$active = Get-Content -LiteralPath (Join-Path $StateRoot 'active.json') -Raw |
-    ConvertFrom-Json
-
-$checks = @(
-    @{ diff = 'local'; paths = @('mise', 'aube', 'uv', 'ghq') },
-    @{ diff = 'roaming'; paths = @('ghq') },
-    @{ diff = 'temp'; paths = @('mise') },
-    @{ diff = 'profileDotRoots'; paths = @('.local/state/mise', '.ghq') }
-)
-
-foreach ($check in $checks) {
-    $diff = Get-Content `
-        -LiteralPath (Join-Path $active.sessionDirectory "diff\$($check.diff).json") `
-        -Raw | ConvertFrom-Json
-
-    foreach ($status in 'new', 'modified', 'metadataOnly') {
-        foreach ($entry in @($diff.$status)) {
-            $path = $entry.path -replace '\\', '/'
-            foreach ($blocked in $check.paths) {
-                if ($path -eq $blocked -or $path.StartsWith("$blocked/", [StringComparison]::OrdinalIgnoreCase)) {
-                    throw "Windows containment regression ($status): $path"
-                }
-            }
-        }
-    }
+$active = Get-Content -LiteralPath (Join-Path $StateRoot 'active.json') -Raw | ConvertFrom-Json
+if ($active.status -ne 'stopped') { throw 'Containment audit did not finish.' }
+$metadata = Get-Content -LiteralPath (Join-Path $active.sessionDirectory 'metadata.json') -Raw | ConvertFrom-Json
+if ($metadata.schemaVersion -ne 3 -or $metadata.status -ne 'stopped') { throw 'Incomplete or obsolete audit.' }
+$policy = Get-Content -LiteralPath (Join-Path $active.sessionDirectory 'policy.json') -Raw | ConvertFrom-Json
+if ($policy.schemaVersion -ne 1 -or $policy.decision -ne 'pass' -or @($policy.violations).Count) {
+    throw "Windows containment failed: $($active.sessionDirectory)\policy.json"
 }
-
-$hostGhqRoot = Join-Path $env:USERPROFILE 'ghq'
-if (Test-Path -LiteralPath $hostGhqRoot) {
-    throw "Windows containment regression: $hostGhqRoot"
-}
+Write-Output 'Windows containment policy: PASS (monitored roots only)'

@@ -15,19 +15,31 @@ param(
     [string] $Session,
     [string] $CanonicalHome,
     [string] $HostProfile,
-    [string] $StateRoot
+    [string] $HostTemp,
+    [string] $HostLocalAppData,
+    [string] $HostRoamingAppData,
+    [string[]] $WorkspaceRoots = @(),
+    [string] $StateRoot,
+    [switch] $HashFiles
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$MonitoredRootIds = @('hostProfile', 'local', 'roaming', 'temp')
 $DefaultManagedBridgePaths = @(
 {{ range .windows.bridges -}}
     '{{ .path }}'
 {{ end -}}
 )
+$ManagedFontPatterns = @(
+{{ range .fonts -}}
+    '{{ .filePattern }}'
+{{ end -}}
+)
 
 function Resolve-FullPath {
     param([Parameter(Mandatory)][string] $Path)
+    if (($Path -replace '\\', '/') -match '(^|/)\.ssh(/|$)') { throw 'SSH paths are excluded without filesystem access.' }
     $fullPath = [IO.Path]::GetFullPath($Path)
     $root = [IO.Path]::GetPathRoot($fullPath)
     if ($fullPath.Equals($root, [StringComparison]::OrdinalIgnoreCase)) { return $root }
@@ -56,8 +68,9 @@ function Resolve-CanonicalHome {
 
 function Resolve-HostProfile {
     if ($HostProfile) { return Resolve-FullPath $HostProfile }
-    $profile = [Environment]::GetFolderPath('UserProfile')
-    if (-not $profile) { $profile = $env:USERPROFILE }
+    $profile = & {
+{{ includeTemplate "lib/windows-host-profile.ps1.tmpl" . }}
+    }
     if (-not $profile) { throw 'Cannot derive the Windows host profile.' }
     return Resolve-FullPath $profile
 }
@@ -69,6 +82,14 @@ function Resolve-StateRoot {
         return Resolve-FullPath (Join-Path $env:XDG_STATE_HOME 'dotfiles-leakage-audit')
     }
     return Resolve-FullPath (Join-Path $HomePath '.local\state\dotfiles-leakage-audit')
+}
+
+function Get-OSStateExclusions([string] $ProfilePath) {
+    # Observed locked NTUSER hive, journal and transaction files. Enumerate only
+    # this filename family; never enumerate any SSH directory or inspect its metadata.
+    if (-not [IO.Directory]::Exists($ProfilePath)) { return @() }
+    @([IO.Directory]::EnumerateFiles($ProfilePath, 'NTUSER.DAT*', [IO.SearchOption]::TopDirectoryOnly) |
+        Where-Object { [IO.Path]::GetFileName($_) -match '^ntuser\.dat(?:\.LOG[12]|\{[0-9a-f-]{36}\}\.TM(?:\.blf|Container[0-9]+\.regtrans-ms))?$' })
 }
 
 function Write-JsonFile {
@@ -124,37 +145,10 @@ public static class AuditSnapshotWriter
     {
         using (var writer = NewWriter(output))
         {
+            if (IsExcluded(root, excludedRoots ?? Array.Empty<string>()))
+                throw new InvalidOperationException("Snapshot root is excluded");
             if (Directory.Exists(root))
                 WriteTree(writer, root, root, "", hashFiles, excludedRoots ?? Array.Empty<string>());
-        }
-    }
-
-    public static void WriteShallow(string root, string output)
-    {
-        using (var writer = NewWriter(output))
-        {
-            if (!Directory.Exists(root)) return;
-            foreach (var path in Directory.EnumerateFileSystemEntries(root))
-                WriteEntry(writer, path, Path.GetFileName(path), false);
-        }
-    }
-
-    public static void WriteDotRoots(string profileRoot, string output, string[] excludedRoots)
-    {
-        using (var writer = NewWriter(output))
-        {
-            if (!Directory.Exists(profileRoot)) return;
-            var exclusions = excludedRoots ?? Array.Empty<string>();
-            foreach (var path in Directory.EnumerateFileSystemEntries(profileRoot))
-            {
-                var name = Path.GetFileName(path);
-                if (!name.StartsWith(".", StringComparison.Ordinal) || IsExcluded(path, exclusions)) continue;
-                var attributes = File.GetAttributes(path);
-                WriteEntry(writer, path, name, false);
-                if ((attributes & FileAttributes.Directory) != 0 &&
-                    (attributes & FileAttributes.ReparsePoint) == 0)
-                    WriteTree(writer, path, path, name, false, exclusions);
-            }
         }
     }
 
@@ -178,7 +172,10 @@ public static class AuditSnapshotWriter
                 var attributes = File.GetAttributes(path);
                 var relative = Path.GetRelativePath(root, path);
                 if (!String.IsNullOrEmpty(relativeBase)) relative = Path.Combine(relativeBase, relative);
-                WriteEntry(writer, path, relative, hashFiles);
+                // Ancestors of excluded bridges are containers, not audited state.
+                // Still descend to detect writes to every non-excluded sibling.
+                if (!Array.Exists(exclusions, x => x.StartsWith(path.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)))
+                    WriteEntry(writer, path, relative, hashFiles);
                 if ((attributes & FileAttributes.Directory) != 0 &&
                     (attributes & FileAttributes.ReparsePoint) == 0)
                     pending.Push(path);
@@ -193,8 +190,8 @@ public static class AuditSnapshotWriter
             : new FileInfo(path);
         var reparse = (info.Attributes & FileAttributes.ReparsePoint) != 0;
         var type = reparse ? "reparsePoint" : info is DirectoryInfo ? "directory" : "file";
-        var size = info is FileInfo file ? file.Length.ToString(CultureInfo.InvariantCulture) : "";
-        var hash = hashFiles && info is FileInfo ? Hash(path) : "";
+        var size = !reparse && info is FileInfo file ? file.Length.ToString(CultureInfo.InvariantCulture) : "";
+        var hash = hashFiles && !reparse && info is FileInfo ? Hash(path) : "";
         var target = reparse ? info.LinkTarget ?? "" : "";
         writer.WriteLine(String.Join(",", new[] {
             Csv(relative.Replace('\\', '/').TrimStart('/')),
@@ -215,6 +212,9 @@ public static class AuditSnapshotWriter
 
     private static bool IsExcluded(string path, string[] roots)
     {
+        // Check names before any Exists, attributes, metadata, or file access.
+        foreach (var part in path.Replace('\\', '/').Split('/'))
+            if (part.Equals(".ssh", StringComparison.OrdinalIgnoreCase)) return true;
         var candidate = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         foreach (var root in roots)
         {
@@ -237,20 +237,15 @@ public static class AuditSnapshotWriter
 function New-SnapshotSet {
     param([Parameter(Mandatory)] $Metadata, [Parameter(Mandatory)][string] $Directory)
     New-Item -ItemType Directory -Path $Directory -Force | Out-Null
-    [AuditSnapshotWriter]::WriteRecursive(
-        $Metadata.roots.quarantine,
-        (Join-Path $Directory 'quarantine.csv'),
-        $true,
-        @()
-    )
-    [AuditSnapshotWriter]::WriteShallow($Metadata.roots.local, (Join-Path $Directory 'local.csv'))
-    [AuditSnapshotWriter]::WriteShallow($Metadata.roots.roaming, (Join-Path $Directory 'roaming.csv'))
-    [AuditSnapshotWriter]::WriteShallow($Metadata.roots.temp, (Join-Path $Directory 'temp.csv'))
-    [AuditSnapshotWriter]::WriteDotRoots(
-        $Metadata.roots.hostProfile,
-        (Join-Path $Directory 'profileDotRoots.csv'),
-        @($Metadata.managedBridgeRoots)
-    )
+    foreach ($id in $MonitoredRootIds) {
+        $exclusions = @($Metadata.managedBridgeRoots) + @($Metadata.osStateExclusions) +
+            @($Metadata.workspaceRoots) + @($Metadata.roots.canonicalHome, $Metadata.auditStateRoot)
+        if ($id -eq 'hostProfile') { $exclusions += @($Metadata.roots.local, $Metadata.roots.roaming, $Metadata.roots.temp) }
+        if ($id -eq 'local') { $exclusions += $Metadata.roots.temp }
+        [AuditSnapshotWriter]::WriteRecursive(
+            $Metadata.roots.$id, (Join-Path $Directory "$id.csv"), $Metadata.hashFiles, [string[]]$exclusions
+        )
+    }
 }
 
 function Compare-Snapshot {
@@ -293,7 +288,7 @@ function New-DiffSet {
     $diffDirectory = Join-Path $SessionDirectory 'diff'
     New-Item -ItemType Directory -Path $diffDirectory -Force | Out-Null
     $diffs = [ordered]@{}
-    foreach ($id in 'quarantine', 'local', 'roaming', 'temp', 'profileDotRoots') {
+    foreach ($id in $MonitoredRootIds) {
         $before = [pscustomobject]@{
             entries = @(Import-Csv -LiteralPath (Join-Path $SessionDirectory "before\$id.csv"))
         }
@@ -314,7 +309,8 @@ function Add-DiffSection {
         $values = @($Diff.$status)
         $label = if ($status -eq 'metadataOnly') { 'METADATA ONLY' } else { $status.ToUpperInvariant() }
         $Lines.Add("  ${label}: $($values.Count)")
-        foreach ($value in $values) { $Lines.Add("    $($value.path)") }
+        foreach ($value in ($values | Select-Object -First 50)) { $Lines.Add("    $($value.path)") }
+        if ($values.Count -gt 50) { $Lines.Add('    ... first 50 shown; complete entries are retained in diff/*.json') }
     }
     $Lines.Add('')
 }
@@ -326,36 +322,111 @@ function New-Report {
     $lines.Add("Started: $($Metadata.startedAtUtc)")
     $lines.Add("Stopped: $($Metadata.stoppedAtUtc)")
     $lines.Add('')
-    Add-DiffSection $lines 'QUARANTINE WRITE' $Diffs.quarantine
     Add-DiffSection $lines 'HOST LOCAL LEAKAGE CANDIDATE' $Diffs.local
     Add-DiffSection $lines 'HOST ROAMING LEAKAGE CANDIDATE' $Diffs.roaming
     Add-DiffSection $lines 'HOST TEMP USAGE' $Diffs.temp
-    Add-DiffSection $lines 'HOST PROFILE DOTROOT LEAKAGE CANDIDATE' $Diffs.profileDotRoots
+    Add-DiffSection $lines 'HOST PROFILE WRITES' $Diffs.hostProfile
     $lines.Add('MANAGED BRIDGE')
     $lines.Add('  Excluded from host-profile leakage candidates:')
     foreach ($path in @($Metadata.managedBridgeRoots)) { $lines.Add("    $path") }
+    $lines.Add('OS STATE EXCLUSIONS (observed locked/inaccessible paths)')
+    foreach ($path in @($Metadata.osStateExclusions)) { $lines.Add("    $path") }
+    $lines.Add('EXPLICIT WORKSPACE EXCLUSIONS')
+    $workspaceProperty = $Metadata.PSObject.Properties['workspaceRoots']
+    if ($null -ne $workspaceProperty) {
+        foreach ($path in @($workspaceProperty.Value)) { $lines.Add("    $path") }
+    }
+    $lines.Add("CONTENT HASHING: $($Metadata.hashFiles)")
+    $lines.Add('RUNNER CHURN ALLOWLIST: none')
+    $policy = Write-PolicyResult $Metadata $Diffs
+    $lines.Add("MANAGED HOST ASSET CHANGES: $(@($policy.managedHostAssets).Count)")
+    $lines.Add("POLICY: $($policy.decision) ($(@($policy.violations).Count) forbidden writes)")
     $reportPath = Join-Path $Metadata.sessionDirectory 'report.txt'
     $lines | Set-Content -LiteralPath $reportPath -Encoding utf8
     return $reportPath
 }
 
+function Write-PolicyResult {
+    param($Metadata, $Diffs)
+    $allowed = [Collections.Generic.List[object]]::new()
+    $violations = @(foreach ($id in $MonitoredRootIds) {
+        foreach ($status in 'new', 'modified', 'metadataOnly') {
+            foreach ($entry in @($Diffs[$id].$status)) {
+                $record = [pscustomobject]@{ root = $id; status = $status; path = $entry.path }
+                # Existing managed host assets, restricted to manifest font names.
+                # Font verification separately checks registration, family and file set.
+                $fontName = $entry.path -replace '^Microsoft/Windows/Fonts/', ''
+                $managedFont = $id -eq 'local' -and $entry.path.StartsWith('Microsoft/Windows/Fonts/', [StringComparison]::OrdinalIgnoreCase) -and
+                    @($Metadata.managedFontPatterns | Where-Object { $fontName -match $_ }).Count -gt 0
+                $current = if ($status -eq 'new') { $entry } else { $entry.after }
+                $fontContainer = $id -eq 'local' -and $current.type -eq 'directory' -and
+                    $entry.path -in @('Microsoft', 'Microsoft/Windows', 'Microsoft/Windows/Fonts')
+                if ($managedFont -or $fontContainer) { $allowed.Add($record) } else { $record }
+            }
+        }
+    })
+    $result = [ordered]@{
+        schemaVersion = 1
+        decision = if ($violations.Count) { 'fail' } else { 'pass' }
+        violations = $violations
+        managedHostAssets = @($allowed)
+        deletedPolicy = 'informational: removal alone is not a state write'
+    }
+    Write-JsonFile $result (Join-Path $Metadata.sessionDirectory 'policy.json')
+    return $result
+}
+
 function Read-DiffSet {
     param([Parameter(Mandatory)][string] $SessionDirectory)
     $diffs = [ordered]@{}
-    foreach ($id in 'quarantine', 'local', 'roaming', 'temp', 'profileDotRoots') {
+    foreach ($id in $MonitoredRootIds) {
         $diffs[$id] = Read-JsonFile (Join-Path $SessionDirectory "diff\$id.json")
     }
     return $diffs
 }
 
 $canonicalHomePath = Resolve-CanonicalHome
-$hostProfilePath = Resolve-HostProfile
 $auditStateRoot = Resolve-StateRoot $canonicalHomePath
-$quarantineRoot = Join-Path $canonicalHomePath '.winprofile'
+if ($Command -eq 'start') {
+    $hostProfilePath = Resolve-HostProfile
+    if (-not [IO.Directory]::Exists($hostProfilePath)) { throw "Host profile directory is unavailable: $hostProfilePath" }
+    # Explicit synthetic/alternate profiles default to their own AppData tree.
+    # Ordinary interactive audits use the registered host folders, not env vars.
+    if (-not $HostProfile) {
+        $shellFolders = 'Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders'
+        if (-not $HostLocalAppData) { $HostLocalAppData = Get-ItemPropertyValue -LiteralPath $shellFolders -Name 'Local AppData' }
+        if (-not $HostRoamingAppData) { $HostRoamingAppData = Get-ItemPropertyValue -LiteralPath $shellFolders -Name 'AppData' }
+    }
+    $hostLocalPath = Resolve-FullPath $(if ($HostLocalAppData) { $HostLocalAppData } else { Join-Path $hostProfilePath 'AppData\Local' })
+    $hostRoamingPath = Resolve-FullPath $(if ($HostRoamingAppData) { $HostRoamingAppData } else { Join-Path $hostProfilePath 'AppData\Roaming' })
+} else {
+    $savedSession = Resolve-SessionDirectory $auditStateRoot -RequireActive
+    $savedMetadata = Read-JsonFile (Join-Path $savedSession 'metadata.json')
+    if ($savedMetadata.schemaVersion -ne 3) { throw 'Obsolete audit schema; start a new audit session with the current script.' }
+    $hostProfilePath = Resolve-FullPath $savedMetadata.roots.hostProfile
+    $HostTemp = $savedMetadata.roots.temp
+    $hostLocalPath = $savedMetadata.roots.local
+    $hostRoamingPath = $savedMetadata.roots.roaming
+}
 if (-not (Test-PathWithin $auditStateRoot $canonicalHomePath) -or
-    (Test-PathWithin $auditStateRoot $quarantineRoot) -or
     (Test-PathWithin $auditStateRoot $hostProfilePath)) {
-    throw "Audit state must remain in the canonical home outside .winprofile: $auditStateRoot"
+    throw "Audit state must remain in the separate canonical development home: $auditStateRoot"
+}
+$hostTempPath = if ($HostTemp) { Resolve-FullPath $HostTemp } else {
+    Join-Path $hostLocalPath 'Temp'
+}
+foreach ($root in $hostTempPath, $hostLocalPath, $hostRoamingPath) {
+    if (Test-PathWithin $root $canonicalHomePath) {
+        throw 'Host roots must identify original host folders, not development environment paths.'
+    }
+}
+$workspacePaths = @($WorkspaceRoots | ForEach-Object { Resolve-FullPath $_ })
+foreach ($workspacePath in $workspacePaths) {
+    foreach ($monitoredRoot in $hostProfilePath, $hostLocalPath, $hostRoamingPath, $hostTempPath) {
+        if (Test-PathWithin $monitoredRoot $workspacePath) {
+            throw "A workspace must not hide an entire monitored root: $workspacePath"
+        }
+    }
 }
 
 switch ($Command) {
@@ -369,9 +440,10 @@ switch ($Command) {
         $sessionId = [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ')
         $sessionDirectory = Join-Path $auditStateRoot $sessionId
         New-Item -ItemType Directory -Path $sessionDirectory | Out-Null
+        $metadata = [ordered]@{}
         try {
             $metadata = [ordered]@{
-                schemaVersion = 2
+                schemaVersion = 3
                 sessionId = $sessionId
                 status = 'starting'
                 startedAtUtc = [DateTime]::UtcNow.ToString('o')
@@ -379,12 +451,24 @@ switch ($Command) {
                 sessionDirectory = $sessionDirectory
                 roots = [ordered]@{
                     canonicalHome = $canonicalHomePath
-                    quarantine = $quarantineRoot
                     hostProfile = $hostProfilePath
-                    local = Join-Path $hostProfilePath 'AppData\Local'
-                    roaming = Join-Path $hostProfilePath 'AppData\Roaming'
-                    temp = Join-Path $hostProfilePath 'AppData\Local\Temp'
+                    local = $hostLocalPath
+                    roaming = $hostRoamingPath
+                    temp = $hostTempPath
                 }
+                auditStateRoot = $auditStateRoot
+                monitoredRootIds = $MonitoredRootIds
+                workspaceRoots = $workspacePaths
+                hashFiles = [bool]$HashFiles
+                managedFontPatterns = $ManagedFontPatterns
+                # Observed locked on Windows: OS registry storage, not a tool state file.
+                osStateExclusions = @(Get-OSStateExclusions $hostProfilePath) + @(
+                    # Observed inaccessible Windows performance assessment state.
+                    (Join-Path $hostTempPath 'WinSAT')
+                )
+                runnerStateExclusions = @()
+                policy = 'New, modified, metadataOnly host entries fail except manifest-managed fonts and their containers; deleted entries are informational.'
+                exclusions = @('Any .ssh path component before filesystem access', 'Managed bridges and their container metadata', 'Canonical home', 'Audit state', 'Explicit command workspaces')
                 environment = [ordered]@{
                     HOME = $env:HOME; USERPROFILE = $env:USERPROFILE; APPDATA = $env:APPDATA
                     LOCALAPPDATA = $env:LOCALAPPDATA; TEMP = $env:TEMP; TMP = $env:TMP
@@ -395,11 +479,15 @@ switch ($Command) {
                     Resolve-FullPath (Join-Path $hostProfilePath ($_ -replace '/', '\'))
                 })
             }
+            Write-JsonFile $metadata (Join-Path $sessionDirectory 'metadata.json')
             New-SnapshotSet $metadata (Join-Path $sessionDirectory 'before')
             $metadata.status = 'running'
             Write-JsonFile $metadata (Join-Path $sessionDirectory 'metadata.json')
             Write-JsonFile @{ status = 'running'; sessionDirectory = $sessionDirectory } $activePath
         } catch {
+            $metadata.status = 'start-failed'
+            $metadata.failure = $_.Exception.Message
+            Write-JsonFile $metadata (Join-Path $sessionDirectory 'metadata.json')
             Write-JsonFile @{ status = 'start-failed'; sessionDirectory = $sessionDirectory } $activePath
             throw
         }
@@ -419,6 +507,8 @@ switch ($Command) {
         $reportPath = New-Report $metadata $diffs
         Write-Output "Audit stopped: $sessionDirectory"
         Write-Output "Report: $reportPath"
+        $policy = Read-JsonFile (Join-Path $sessionDirectory 'policy.json')
+        if ($policy.decision -ne 'pass') { throw "Forbidden host writes detected; see $reportPath" }
     }
     'report' {
         $sessionDirectory = Resolve-SessionDirectory $auditStateRoot

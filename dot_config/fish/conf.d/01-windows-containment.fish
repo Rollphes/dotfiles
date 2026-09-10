@@ -2,10 +2,12 @@ if not set -q MSYSTEM
     return
 end
 
-set -gx APPDATA "$HOME/.winprofile/AppData/Roaming"
-set -gx LOCALAPPDATA "$HOME/.winprofile/AppData/Local"
-set -gx TEMP /tmp
-set -gx TMP /tmp
+# HOME stays POSIX; native profile and temp resolvers receive Windows paths.
+set -gx USERPROFILE (cygpath -w "$HOME")
+set -gx APPDATA (cygpath -w "$HOME/AppData/Roaming")
+set -gx LOCALAPPDATA (cygpath -w "$HOME/AppData/Local")
+set -gx TEMP (cygpath -w /tmp)
+set -gx TMP "$TEMP"
 set -gx GHQ_ROOT "$HOME/ghq"
 
 set -gx MISE_CONFIG_DIR "$XDG_CONFIG_HOME/mise"

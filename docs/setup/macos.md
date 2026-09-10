@@ -78,4 +78,4 @@ The managed WezTerm configuration launches native Homebrew Fish from
 `/opt/homebrew/bin/fish` on Apple Silicon or `/usr/local/bin/fish` on Intel.
 
 Start WezTerm from Applications after installation. macOS uses native paths;
-the Windows environment quarantine and bridge scripts do not run.
+the Windows development environment containment and bridge scripts do not run.

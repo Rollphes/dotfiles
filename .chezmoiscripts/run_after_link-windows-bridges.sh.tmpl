@@ -7,7 +7,7 @@ set -eu
 {{ includeTemplate "lib/msys2-env.sh.tmpl" . }}
 {{ includeTemplate "lib/console.sh.tmpl" . }}
 
-# Preserve mklink /D and reg.exe /v arguments across MSYS2 conversion.
+# Preserve mklink /D arguments across MSYS2 conversion.
 export MSYS_NO_PATHCONV=1
 
 component="windows-bridges"
@@ -86,7 +86,7 @@ fail_broken_link() {
     exit 1
 }
 
-fail_developer_mode() {
+fail_link_privilege() {
     name="$1"
     kind="$2"
 
@@ -99,7 +99,7 @@ fail_developer_mode() {
     printf '\n' >&2
     console_detail \
         "reason" \
-        "Windows Developer Mode is required for cross-home symlinks" >&2
+        "Windows Developer Mode or an existing symlink privilege is required" >&2
 
     console_failed "$component"
     exit 1
@@ -109,30 +109,15 @@ resolve_path() {
     realpath "$1" 2>/dev/null || return 1
 }
 
-require_developer_mode() {
-    name="$1"
-    kind="$2"
-
-    developer_mode=$(
-        reg.exe query \
-            'HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock' \
-            /v AllowDevelopmentWithoutDevLicense 2>/dev/null \
-        | grep -Eo '0x[0-9a-fA-F]+' \
-        | tail -n 1
-    )
-
-    if [ "$developer_mode" != "0x1" ]; then
-        fail_developer_mode "$name" "$kind"
-    fi
-}
-
 # Keep filesystem operations in the MSYS2 POSIX namespace.
 msys_home=$(cygpath -u "{{ .chezmoi.destDir }}")
 
-[ -n "${USERPROFILE:-}" ] ||
-    fail "USERPROFILE is not set"
-
-win_home=$(cygpath -u "$USERPROFILE")
+# Bridges serve host applications, not the virtualized development profile.
+host_profile=$(powershell.exe -NoProfile -NonInteractive -Command '
+{{ includeTemplate "lib/windows-host-profile.ps1.tmpl" . }}
+') || fail "Cannot resolve the registered Windows host profile"
+win_home=$(cygpath -u "$(printf '%s' "$host_profile" | tr -d '\r')")
+[ "$win_home" != "$msys_home" ] || fail "Host and development profiles must differ"
 
 reconcile_one() {
     kind="$1"
@@ -203,8 +188,6 @@ reconcile_one() {
         return 0
     fi
 
-    require_developer_mode "$name" "$kind"
-
     # Only the selected child is bridged; its parent remains host-local.
     mkdir -p "$(dirname "$dst")"
 
@@ -213,10 +196,10 @@ reconcile_one() {
 
     if [ "$kind" = "dir" ]; then
         cmd.exe /c mklink /D "$dst_win" "$src_win" >/dev/null ||
-            fail "failed to create directory bridge for '$name'"
+            fail_link_privilege "$name" "$kind"
     else
         cmd.exe /c mklink "$dst_win" "$src_win" >/dev/null ||
-            fail "failed to create file bridge for '$name'"
+            fail_link_privilege "$name" "$kind"
     fi
 
     console_status \

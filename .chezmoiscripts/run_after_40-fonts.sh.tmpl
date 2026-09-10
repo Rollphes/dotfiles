@@ -2,6 +2,7 @@
 set -eu
 
 {{ includeTemplate "lib/xdg-env.sh.tmpl" . }}
+{{ includeTemplate "lib/msys2-env.sh.tmpl" . }}
 {{ includeTemplate "lib/console.sh.tmpl" . }}
 
 component="fonts"
@@ -16,7 +17,7 @@ if ! command -v powershell.exe >/dev/null 2>&1; then
 fi
 windows_local_app_data="$(
     powershell.exe -NoProfile -NonInteractive -Command \
-        '[Environment]::GetFolderPath("LocalApplicationData")' \
+        '(Get-ItemProperty -LiteralPath "Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders" -Name "Local AppData" -ErrorAction Stop)."Local AppData"' \
         | tr -d '\r'
 )"
 if [ -z "$windows_local_app_data" ]; then

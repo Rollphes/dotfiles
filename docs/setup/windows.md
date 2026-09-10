@@ -14,8 +14,9 @@ Settings
   -> Developer Mode
 ```
 
-Developer Mode is required for the Windows symbolic links managed by this
-repository.
+Developer Mode allows the Windows symbolic links managed by this repository to
+be created without elevation. A runner that already has symlink privilege can
+also create them; the apply does not change Windows privilege settings.
 
 Install [MSYS2] at the supported root:
 
@@ -174,3 +175,65 @@ audit report
 
 The audit leaves no background process running. Reports and snapshots are kept
 under `$XDG_STATE_HOME/dotfiles-leakage-audit`.
+
+The development process tree uses POSIX `HOME=/home/<username>` and native
+`USERPROFILE=C:\msys64\home\<username>`. `APPDATA` and `LOCALAPPDATA` are
+`USERPROFILE\AppData\Roaming` and `USERPROFILE\AppData\Local`; `TEMP` and `TMP`
+resolve to `C:\msys64\tmp`. Fish exports profile paths in native form explicitly.
+Apply scripts use the chezmoi destination as HOME, and the mise subprocess also
+converts XDG and tool-specific variables before starting native descendants.
+WezTerm's native development shells use the same profile authority.
+
+This is process-local. Windows login settings, Known Folders and the host GUI
+profile remain unchanged. Managed bridges still originate in the registered
+Windows login profile. Managed user fonts remain in the registered host Local
+AppData folder. No runtime data is migrated or deleted by this change.
+
+The audit is part of **STG5 leakage closure**. It records the real host profile
+independently of virtualized USERPROFILE; CI captures the original profile and
+temp once in CI-only variables. Interactive audit defaults to the registered
+login profile and its `AppData\Local\Temp`; supply `-HostProfile` and `-HostTemp`
+at `start` if the host uses another location. Stop/report reuse saved authority.
+For a command whose intended project lies inside a monitored host root, pass
+that exact project path with `-WorkspaceRoots` at start. No workspace is guessed
+or globally exported; a path hiding an entire monitored root is rejected.
+
+Snapshots recursively monitor the host profile, Local/Roaming AppData, and host
+temp, including ordinary directory names such as `go`. They never descend into
+reparse points. When parent enumeration yields a `.ssh` entry, the audit rejects
+it before querying that entry or traversing inside it; it does not inspect its
+existence, metadata, contents or children. Managed bridges, their container
+metadata, canonical home and audit state are excluded. Locked Windows NTUSER
+registry hive, journal and transaction filenames observed during validation are
+separately recorded as OS exclusions, along with the observed inaccessible host
+Temp `WinSAT` directory. There is no development-tool or runner-wide allowlist.
+Manifest-managed font filenames and their directory containers are classified as
+managed host assets; the font verification checks their contents and registration.
+
+`policy.json` connects detection to enforcement: `new`, `modified` and
+`metadataOnly` forbidden entries fail `audit stop` and the CI verifier. `deleted`
+alone is informational; a surviving parent timestamp change still counts as a
+write. A snapshot error is a coverage failure, never PASS. Reports show counts,
+a bounded preview and the policy decision. This is a before/after filesystem
+audit, not a process tracer: temporary writes removed before stop, arbitrary
+unmonitored volumes and unrelated host application activity require separate
+investigation. Keep the audit window focused; do not suppress unknown churn with
+a broad allowlist.
+By default snapshots compare names, types, sizes, link targets and write times.
+`audit start -HashFiles` additionally hashes file contents (potentially expensive
+on a populated host profile). Without hashing, same-size changes with restored
+timestamps are outside detection coverage.
+Reports show at most 50 entries per status; full CSV/JSON evidence remains in the
+session directory and is uploaded as a Windows CI artifact even on failure.
+
+Go uses its native defaults under the development profile: `go`,
+`AppData\Local\go-build`, and `AppData\Roaming\go`. npm cache also resolves under
+development Local AppData. No extra Go environment overrides are required by the
+validated resolvers. Runtime probes in `.github/scripts/probe-windows-runtime.ps1`
+exercise the native child environment without reinstalling tools or loading user
+Neovim configuration.
+
+MISE variables in this repository use `export` / Fish `set -gx`, not universal
+variables. To inspect a suspected machine-local universal value without changing
+it, run `set --show MISE_CONFIG_DIR MISE_DATA_DIR MISE_STATE_DIR MISE_CACHE_DIR
+MISE_TMP_DIR` in Fish. No universal-variable deletion is part of this setup.
