@@ -113,7 +113,27 @@ resolve_path() {
 msys_home=$(cygpath -u "{{ .chezmoi.destDir }}")
 
 # Bridges serve host applications, not the virtualized development profile.
-host_profile=$(powershell.exe -NoProfile -NonInteractive -Command '
+windows_powershell="$(cygpath -u "${WINDIR:?}")/System32/WindowsPowerShell/v1.0/powershell.exe"
+[ -x "$windows_powershell" ] || fail "Windows PowerShell not found: $windows_powershell"
+
+host_profile_hint="${HOMEDRIVE:-}${HOMEPATH:-}"
+[ -n "$host_profile_hint" ] || fail "HOMEDRIVE/HOMEPATH unavailable"
+host_profile_hint=$(cygpath -w "$(cygpath -u "$host_profile_hint")")
+host_profile_hint_posix=$(cygpath -u "$host_profile_hint")
+[ "$host_profile_hint_posix" != "$msys_home" ] || fail "Host and development profiles must differ"
+
+run_host_powershell() (
+    host_profile=$1
+    shift
+
+    export HOME="$host_profile"
+    export USERPROFILE="$host_profile"
+    export APPDATA="$(cygpath -w "$(cygpath -u "$host_profile")/AppData/Roaming")"
+    export LOCALAPPDATA="$(cygpath -w "$(cygpath -u "$host_profile")/AppData/Local")"
+    "$windows_powershell" "$@"
+)
+
+host_profile=$(run_host_powershell "$host_profile_hint" -NoProfile -NonInteractive -Command '
 {{ includeTemplate "lib/windows-host-profile.ps1.tmpl" . }}
 ') || fail "Cannot resolve the registered Windows host profile"
 win_home=$(cygpath -u "$(printf '%s' "$host_profile" | tr -d '\r')")

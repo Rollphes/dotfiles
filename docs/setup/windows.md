@@ -188,12 +188,13 @@ WezTerm's native development shells use the same profile authority.
 
 This is process-local. Windows login settings, Known Folders and the host GUI
 profile remain unchanged. Managed bridges still originate in the registered
-Windows login profile. Managed user fonts remain in the registered host Local
-AppData folder. The font installer scopes the registered host `HOME`,
-`USERPROFILE`, `APPDATA` and `LOCALAPPDATA` to its PowerShell/GDI children so
-Windows profile initialization cannot create `AppData` below the development
-home. `TEMP` and `TMP` remain the canonical MSYS2 temp during that host
-operation. No runtime data is migrated or deleted by this change.
+Windows login profile. Their profile resolver and the font installer scope the
+registered host `HOME`, `USERPROFILE`, `APPDATA` and `LOCALAPPDATA` to their
+PowerShell children. This prevents Windows profile initialization from creating
+`AppData` below the development home. Managed user fonts remain in the
+registered host Local AppData folder. `TEMP` and `TMP` remain the canonical
+MSYS2 temp during host operations. No runtime data is migrated or deleted by
+this change.
 
 The current MSYS2 Atuin package calls Windows Known Folders through its Rust
 `directories` dependency and cannot initialize under the virtualized development
