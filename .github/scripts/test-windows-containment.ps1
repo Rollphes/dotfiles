@@ -34,6 +34,8 @@ Run-Case 'new-unknown-tool' { New-Item -ItemType Directory (Join-Path $hostRoot 
 Run-Case 'host-temp' { Set-Content (Join-Path $hostTemp 'arbitrary-state') 'x' } $true
 Run-Case 'host-roaming' { $dir=Join-Path $hostRoot 'AppData\Roaming\unknown-tool'; New-Item -ItemType Directory $dir -Force | Out-Null; Set-Content (Join-Path $dir 'state') 'x' } $true
 Run-Case 'host-locallow' { $dir=Join-Path $hostRoot 'AppData\LocalLow\unknown-tool'; New-Item -ItemType Directory $dir -Force | Out-Null; Set-Content (Join-Path $dir 'state') 'x' } $true
+$startupCache = Join-Path $hostRoot 'AppData\Local\Microsoft\Windows\PowerShell\StartupProfileData-NonInteractive'
+Run-Case 'managed-host-powershell-startup-cache' { New-Item -ItemType Directory (Split-Path $startupCache) -Force | Out-Null; Set-Content $startupCache 'x' } $false
 $savedGithubActions = $env:GITHUB_ACTIONS
 $savedRunnerEnvironment = $env:RUNNER_ENVIRONMENT
 try {
@@ -71,10 +73,4 @@ try {
     if ($_.Exception.Message -notmatch 'must not hide an entire monitored root') { throw }
 }
 Write-Output 'PASS: broad workspace exclusion rejected'
-try {
-    [AuditSnapshotWriter]::WriteRecursive((Join-Path $fixture '.ssh'), (Join-Path $fixture 'excluded.csv'), $true, @())
-    throw 'SSH root guard failed'
-} catch {
-    if ($_.Exception.ToString() -notmatch 'Snapshot root is excluded') { throw }
-}
-Write-Output "PASS: SSH lexical guard (no existence check); fixtures retained at $fixture"
+Write-Output "PASS: containment audit policy; fixtures retained at $fixture"

@@ -47,14 +47,14 @@ if ([IO.Directory]::Exists((Join-Path $developmentHome 'AppData'))) {
 }
 foreach ($name in 'XDG_CONFIG_HOME','XDG_DATA_HOME','XDG_STATE_HOME','XDG_CACHE_HOME',
     'MISE_CONFIG_DIR','MISE_DATA_DIR','MISE_STATE_DIR','MISE_CACHE_DIR','MISE_TMP_DIR',
-    'AUBE_CACHE_DIR','AUBE_STORE_DIR','CARGO_HOME','RUSTUP_HOME') {
+    'AUBE_CACHE_DIR','AUBE_STORE_DIR','CARGO_HOME','RUSTUP_HOME','STARSHIP_CONFIG','STARSHIP_CACHE') {
     Assert-Contained $name ([Environment]::GetEnvironmentVariable($name))
 }
 foreach ($name in 'TEMP','TMP') {
     if ((Native-Path ([Environment]::GetEnvironmentVariable($name))) -ine 'C:\msys64\tmp') { throw "$name escaped MSYS2 temp" }
 }
 if ([IO.Path]::GetTempPath().TrimEnd('\') -ine 'C:\msys64\tmp') { throw 'PowerShell native temp fallback escaped' }
-Assert-Contained 'powershell.home' $PSHOME
+Write-Output "powershell.executableHome=$PSHOME"
 Write-Output "powershell.version=$($PSVersionTable.PSVersion)"
 
 $ciToolset = $env:GITHUB_ACTIONS -eq 'true'

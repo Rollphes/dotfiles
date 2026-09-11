@@ -19,6 +19,8 @@ export UV_CACHE_DIR="$XDG_CACHE_HOME/uv"
 export UV_TOOL_DIR="$XDG_DATA_HOME/uv/tools"
 export UV_PYTHON_INSTALL_DIR="$XDG_DATA_HOME/uv/python"
 export _ZO_DATA_DIR="$XDG_DATA_HOME/zoxide"
+export STARSHIP_CONFIG="$XDG_CONFIG_HOME/starship.toml"
+export STARSHIP_CACHE="$XDG_CACHE_HOME/starship"
 
 msys2_export_native_environment() {
     export HOME="$(cygpath -m "$HOME")"
@@ -45,5 +47,7 @@ msys2_export_native_environment() {
     export UV_TOOL_DIR="$(cygpath -m "$UV_TOOL_DIR")"
     export UV_PYTHON_INSTALL_DIR="$(cygpath -m "$UV_PYTHON_INSTALL_DIR")"
     export _ZO_DATA_DIR="$(cygpath -m "$_ZO_DATA_DIR")"
+    export STARSHIP_CONFIG="$(cygpath -m "$STARSHIP_CONFIG")"
+    export STARSHIP_CACHE="$(cygpath -m "$STARSHIP_CACHE")"
 }
 {{- end }}

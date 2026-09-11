@@ -491,11 +491,15 @@ switch ($Command) {
                 # Observed locked on Windows: OS registry storage, not a tool state file.
                 osStateExclusions = @(Get-OSStateExclusions $hostProfilePath) + @(
                     # Observed inaccessible Windows performance assessment state.
-                    (Join-Path $hostTempPath 'WinSAT')
+                    (Join-Path $hostTempPath 'WinSAT'),
+                    # Host-scoped font and bridge PowerShell children update this
+                    # exact native startup cache. The canonical counterpart is
+                    # deliberately still monitored as forbidden AppData.
+                    (Join-Path $hostLocalPath 'Microsoft\Windows\PowerShell\StartupProfileData-NonInteractive')
                 )
                 runnerStateExclusions = @(Get-RunnerStateExclusions $hostProfilePath $hostLocalPath)
                 policy = 'New, modified, metadataOnly host or canonical AppData entries fail except manifest-managed fonts and their containers; deleted entries are informational.'
-                exclusions = @('Any .ssh path component before filesystem access', 'Managed bridges and their container metadata', 'Canonical home except its forbidden AppData root', 'Audit state', 'Explicit command workspaces', 'Observed GitHub-hosted runner OS cache roots')
+                exclusions = @('Any .ssh path component before filesystem access', 'Managed bridges and their container metadata', 'Canonical home except its forbidden AppData root', 'Audit state', 'Explicit command workspaces', 'Observed GitHub-hosted runner OS cache paths')
                 environment = [ordered]@{
                     HOME = $env:HOME; USERPROFILE = $env:USERPROFILE; APPDATA = $env:APPDATA
                     LOCALAPPDATA = $env:LOCALAPPDATA; TEMP = $env:TEMP; TMP = $env:TMP

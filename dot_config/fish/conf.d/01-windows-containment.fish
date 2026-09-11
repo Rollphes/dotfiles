@@ -29,3 +29,8 @@ set -gx UV_PYTHON_INSTALL_DIR "$XDG_DATA_HOME/uv/python"
 
 # zoxide uses the Windows local application data directory by default.
 set -gx _ZO_DATA_DIR "$XDG_DATA_HOME/zoxide"
+
+# Override an inherited host-profile STARSHIP_CACHE for non-interactive Fish
+# too, before integration generators run.
+set -gx STARSHIP_CONFIG "$XDG_CONFIG_HOME/starship.toml"
+set -gx STARSHIP_CACHE "$XDG_CACHE_HOME/starship"

@@ -58,40 +58,11 @@ jobs:
           "DOTFILES_CI_HOST_TEMP=$hostTemp" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           $msysHome = "C:\msys64\home\$env:USERNAME"
           $cargoHome = "$msysHome\.cargo"
-          $rustupHome = "$msysHome\.rustup"
-          $xdgConfigHome = "$msysHome\.config"
-          $xdgDataHome = "$msysHome\.local\share"
-          $xdgStateHome = "$msysHome\.local\state"
-          $xdgCacheHome = "$msysHome\.cache"
           $msysTemp = 'C:\msys64\tmp'
           New-Item -ItemType Directory -Force -Path $msysHome, $msysTemp | Out-Null
-          "USERPROFILE=$msysHome" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
-          "APPDATA=$xdgConfigHome" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
-          "LOCALAPPDATA=$xdgDataHome" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
-          "HOME=$msysHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "CARGO_HOME=$cargoHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "RUSTUP_HOME=$rustupHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "XDG_CONFIG_HOME=$xdgConfigHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "XDG_DATA_HOME=$xdgDataHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "XDG_STATE_HOME=$xdgStateHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "XDG_CACHE_HOME=$xdgCacheHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "TEMP=$msysTemp" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "TMP=$msysTemp" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "GHQ_ROOT=$msysHome\ghq" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "GOCACHE=$xdgCacheHome\go-build" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "NPM_CONFIG_CACHE=$xdgCacheHome\npm" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "MISE_CONFIG_DIR=$xdgConfigHome\mise" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "MISE_DATA_DIR=$xdgDataHome\mise" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "MISE_STATE_DIR=$xdgStateHome\mise" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "MISE_CACHE_DIR=$xdgCacheHome\mise" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "MISE_TMP_DIR=$xdgCacheHome\mise\tmp" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "AUBE_CACHE_DIR=$xdgCacheHome\aube" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "AUBE_STORE_DIR=$xdgDataHome\aube\store" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "UV_CACHE_DIR=$xdgCacheHome\uv" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "UV_TOOL_DIR=$xdgDataHome\uv\tools" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "UV_PYTHON_INSTALL_DIR=$xdgDataHome\uv\python" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "_ZO_DATA_DIR=$xdgDataHome\zoxide" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          'MSYSTEM=UCRT64' | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          # Keep runner shells on the real host profile. Each Windows step enters
+          # the development contract only after PowerShell has finished startup.
+          "DOTFILES_CI_DEVELOPMENT_HOME=$msysHome" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           'C:\msys64\ucrt64\bin' | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
           'C:\msys64\usr\bin' | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
           "$msysHome\.local\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
@@ -104,6 +75,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          . .github/scripts/set-windows-development-environment.ps1
           & 'C:\msys64\usr\bin\bash.exe' -lc @'
           pacman -Sy --needed --noconfirm \
             fish \
@@ -120,6 +92,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          . .github/scripts/set-windows-development-environment.ps1
           & 'C:\msys64\usr\bin\bash.exe' -lc @'
           mkdir -p "$HOME/.local/bin"
           curl -fsLS https://get.chezmoi.io | sh -s -- -b "$HOME/.local/bin"
@@ -158,6 +131,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          . .github/scripts/set-windows-development-environment.ps1
           $auditScript = Join-Path $env:TEMP 'windows-leakage-audit.ps1'
           chezmoi `
             --source $env:GITHUB_WORKSPACE `
@@ -181,6 +155,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          . .github/scripts/set-windows-development-environment.ps1
           chezmoi --source $env:GITHUB_WORKSPACE init --no-tty
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -202,13 +177,17 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          & C:\msys64\usr\bin\fish.exe -c 'pwsh.exe -NoProfile -File .github/scripts/probe-windows-runtime.ps1'
+          . .github/scripts/set-windows-development-environment.ps1
+          # This runner PowerShell started with the host profile. Entering the
+          # development contract after startup avoids its hard-coded AppData cache.
+          & .github/scripts/probe-windows-runtime.ps1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Report Windows first-apply leakage
         if: always() && runner.os == 'Windows'
         shell: pwsh
         run: |
+          . .github/scripts/set-windows-development-environment.ps1
           $auditScript = Join-Path $env:TEMP 'windows-leakage-audit.ps1'
           try {
             & $auditScript stop -StateRoot "$env:HOME\.local\state\dotfiles-leakage-ci\first"
@@ -245,6 +224,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          . .github/scripts/set-windows-development-environment.ps1
           $env:PATH = @(
             "$env:HOME\.local\bin",
             "$env:HOME\.local\share\mise\shims",
@@ -297,14 +277,14 @@ jobs:
               "XDG_CONFIG_HOME=$fishConfigHome" `
               'C:\msys64\usr\bin\fish.exe' `
               -c @'
-          printf '%s\n' "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$APPDATA" "$LOCALAPPDATA" "$TEMP" "$TMP" "$GHQ_ROOT" "$GOCACHE" "$NPM_CONFIG_CACHE" "$MISE_CONFIG_DIR" "$MISE_DATA_DIR" "$MISE_STATE_DIR" "$MISE_CACHE_DIR" "$MISE_TMP_DIR" "$AUBE_CACHE_DIR" "$AUBE_STORE_DIR" "$UV_CACHE_DIR" "$UV_TOOL_DIR" "$UV_PYTHON_INSTALL_DIR" "$_ZO_DATA_DIR" "$HOME" "$USERPROFILE"
+          printf '%s\n' "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$APPDATA" "$LOCALAPPDATA" "$TEMP" "$TMP" "$GHQ_ROOT" "$GOCACHE" "$NPM_CONFIG_CACHE" "$MISE_CONFIG_DIR" "$MISE_DATA_DIR" "$MISE_STATE_DIR" "$MISE_CACHE_DIR" "$MISE_TMP_DIR" "$AUBE_CACHE_DIR" "$AUBE_STORE_DIR" "$UV_CACHE_DIR" "$UV_TOOL_DIR" "$UV_PYTHON_INSTALL_DIR" "$_ZO_DATA_DIR" "$STARSHIP_CONFIG" "$STARSHIP_CACHE" "$HOME" "$USERPROFILE"
           command -s cygpath
           '@
           )
           $emptyEnvironment = @(
             $fishEnvironment | Where-Object { [string]::IsNullOrWhiteSpace($_) }
           )
-          if ($fishEnvironment.Count -ne 25 -or $emptyEnvironment.Count -ne 0) {
+          if ($fishEnvironment.Count -ne 27 -or $emptyEnvironment.Count -ne 0) {
             throw "Unexpected Fish environment output: $($fishEnvironment.Count) values"
           }
           $expectedEnvironment = @(
@@ -330,6 +310,8 @@ jobs:
             "$env:HOME\.local\share\uv\tools",
             "$env:HOME\.local\share\uv\python",
             "$env:HOME\.local\share\zoxide",
+            "$env:HOME\.config\starship.toml",
+            "$env:HOME\.cache\starship",
             $env:HOME,
             $env:HOME,
             'C:\msys64\usr\bin\cygpath.exe'
@@ -465,7 +447,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-leakage-audit
-          path: ${{ env.HOME }}/.local/state/dotfiles-leakage-ci
+          path: ${{ env.DOTFILES_CI_DEVELOPMENT_HOME }}/.local/state/dotfiles-leakage-ci
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 7

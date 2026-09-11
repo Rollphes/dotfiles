@@ -225,7 +225,11 @@ metadata, canonical home outside its forbidden `AppData` root, and audit state
 are excluded. Locked Windows NTUSER
 registry hive, journal and transaction filenames observed during validation are
 separately recorded as OS exclusions, along with the observed inaccessible host
-Temp `WinSAT` directory. On a GitHub-hosted runner only, the two OS cache roots
+Temp `WinSAT` directory. The exact host Local AppData file
+`Microsoft\Windows\PowerShell\StartupProfileData-NonInteractive` is also
+excluded because the managed font and bridge operations launch host-scoped
+PowerShell children that update it. Its counterpart below canonical `AppData`
+remains forbidden. On a GitHub-hosted runner only, the two OS cache roots
 observed in run `34536176054` are also excluded:
 `Microsoft\Windows\WebCache` below host Local AppData and
 `AppData\LocalLow\Microsoft\CryptnetUrlCache` below the host profile. The
@@ -253,6 +257,9 @@ session directory and is uploaded as a Windows CI artifact even on failure.
 Go keeps the platform-neutral defaults `go`, `go\pkg\mod`, and `.config\go\env`;
 `GOCACHE` is fixed to `.cache\go-build`. npm cache is fixed to `.cache\npm`, while
 tree-sitter parser data follows `LOCALAPPDATA` into `.local\share\tree-sitter`.
+Starship config and cache are fixed to `.config\starship.toml` and
+`.cache\starship`; this also overrides any inherited host-profile
+`STARSHIP_CACHE` before non-interactive Fish integration generation.
 Runtime probes in `.github/scripts/probe-windows-runtime.ps1`
 exercise the native child environment without reinstalling tools or loading user
 Neovim configuration. GitHub Actions excludes Go and the `go:*` backend from the
