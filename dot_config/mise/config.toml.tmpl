@@ -1,5 +1,5 @@
 [settings.github]
-credential_command = "gh auth token"
+use_git_credentials = true
 
 {{ if eq .chezmoi.os "windows" -}}
 # sigstore-rust resolves its TUF cache through Windows Known Folders, which
