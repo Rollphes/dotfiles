@@ -10,18 +10,13 @@ state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles-fonts"
 
 {{ if eq .chezmoi.os "windows" -}}
 font_os="windows"
-windows_powershell="$(cygpath -u "${WINDIR:?}")/System32/WindowsPowerShell/v1.0/powershell.exe"
+{{ includeTemplate "lib/windows-host-powershell.sh.tmpl" . }}
 if [ ! -x "$windows_powershell" ]; then
     console_status "ERROR" "$windows_powershell" "tool" "not found"
     console_failed "$component"
     exit 1
 fi
 
-# Font registration belongs to the Windows host profile. Starting PowerShell
-# with the virtualized development USERPROFILE can initialize
-# USERPROFILE\AppData\Roaming even when APPDATA points at XDG_CONFIG_HOME.
-# Bootstrap from the login environment, verify the registered profile, then
-# scope the host profile variables to font-only PowerShell children.
 host_profile_hint="${HOMEDRIVE:-}${HOMEPATH:-}"
 if [ -z "$host_profile_hint" ]; then
     console_status "ERROR" "Windows host profile" "path" "HOMEDRIVE/HOMEPATH unavailable"
@@ -39,21 +34,8 @@ fi
 host_app_data_hint="$(cygpath -w "$(cygpath -u "$host_profile_hint")/AppData/Roaming")"
 host_local_app_data_hint="$(cygpath -w "$(cygpath -u "$host_profile_hint")/AppData/Local")"
 
-run_host_powershell() (
-    host_profile=$1
-    host_app_data=$2
-    host_local_app_data=$3
-    shift 3
-
-    export HOME="$host_profile"
-    export USERPROFILE="$host_profile"
-    export APPDATA="$host_app_data"
-    export LOCALAPPDATA="$host_local_app_data"
-    "$windows_powershell" "$@"
-)
-
 windows_host_profile="$(
-    run_host_powershell \
+    windows_run_host_powershell \
         "$host_profile_hint" \
         "$host_app_data_hint" \
         "$host_local_app_data_hint" \
@@ -73,7 +55,7 @@ if [ "$(cygpath -u "$windows_host_profile")" = "$development_home" ]; then
 fi
 
 windows_host_app_data="$(
-    run_host_powershell \
+    windows_run_host_powershell \
         "$windows_host_profile" \
         "$host_app_data_hint" \
         "$host_local_app_data_hint" \
@@ -82,7 +64,7 @@ windows_host_app_data="$(
         | tr -d '\r'
 )"
 windows_local_app_data="$(
-    run_host_powershell \
+    windows_run_host_powershell \
         "$windows_host_profile" \
         "$windows_host_app_data" \
         "$host_local_app_data_hint" \
@@ -158,7 +140,7 @@ family_matches() (
             while IFS= read -r file; do
                 [ -n "$file" ] && cygpath -w "$file" >> "$native_list"
             done < "$files"
-            run_host_powershell \
+            windows_run_host_powershell \
                 "$windows_host_profile" \
                 "$windows_host_app_data" \
                 "$windows_local_app_data" \
@@ -310,7 +292,7 @@ install_font() (
     while IFS= read -r name; do
         cygpath -w "$font_dir/$name" >> "$paths_file"
     done < "$names_file"
-    run_host_powershell \
+    windows_run_host_powershell \
         "$windows_host_profile" \
         "$windows_host_app_data" \
         "$windows_local_app_data" \

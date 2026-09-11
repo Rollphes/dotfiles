@@ -1,0 +1,14 @@
+windows_powershell="$(cygpath -u "${WINDIR:?}")/System32/WindowsPowerShell/v1.0/powershell.exe"
+
+windows_run_host_powershell() (
+    host_profile=$1
+    host_app_data=$2
+    host_local_app_data=$3
+    shift 3
+
+    export HOME="$host_profile"
+    export USERPROFILE="$host_profile"
+    export APPDATA="$host_app_data"
+    export LOCALAPPDATA="$host_local_app_data"
+    "$windows_powershell" "$@"
+)

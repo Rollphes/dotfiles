@@ -2,9 +2,7 @@
 use_git_credentials = true
 
 {{ if eq .chezmoi.os "windows" -}}
-# sigstore-rust resolves its TUF cache through Windows Known Folders, which
-# cannot follow this process-local development profile without host leakage.
-# Other aqua verification methods remain enabled.
+# Avoid sigstore-rust's host Known Folder cache in the development process tree.
 [settings.aqua]
 github_attestations = false
 

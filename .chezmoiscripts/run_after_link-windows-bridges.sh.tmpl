@@ -6,6 +6,7 @@ set -eu
 {{ includeTemplate "lib/xdg-env.sh.tmpl" . }}
 {{ includeTemplate "lib/msys2-env.sh.tmpl" . }}
 {{ includeTemplate "lib/console.sh.tmpl" . }}
+{{ includeTemplate "lib/windows-host-powershell.sh.tmpl" . }}
 
 # Preserve mklink /D arguments across MSYS2 conversion.
 export MSYS_NO_PATHCONV=1
@@ -112,8 +113,6 @@ resolve_path() {
 # Keep filesystem operations in the MSYS2 POSIX namespace.
 msys_home=$(cygpath -u "{{ .chezmoi.destDir }}")
 
-# Bridges serve host applications, not the virtualized development profile.
-windows_powershell="$(cygpath -u "${WINDIR:?}")/System32/WindowsPowerShell/v1.0/powershell.exe"
 [ -x "$windows_powershell" ] || fail "Windows PowerShell not found: $windows_powershell"
 
 host_profile_hint="${HOMEDRIVE:-}${HOMEPATH:-}"
@@ -121,19 +120,14 @@ host_profile_hint="${HOMEDRIVE:-}${HOMEPATH:-}"
 host_profile_hint=$(cygpath -w "$(cygpath -u "$host_profile_hint")")
 host_profile_hint_posix=$(cygpath -u "$host_profile_hint")
 [ "$host_profile_hint_posix" != "$msys_home" ] || fail "Host and development profiles must differ"
+host_app_data_hint=$(cygpath -w "$host_profile_hint_posix/AppData/Roaming")
+host_local_app_data_hint=$(cygpath -w "$host_profile_hint_posix/AppData/Local")
 
-run_host_powershell() (
-    host_profile=$1
-    shift
-
-    export HOME="$host_profile"
-    export USERPROFILE="$host_profile"
-    export APPDATA="$(cygpath -w "$(cygpath -u "$host_profile")/AppData/Roaming")"
-    export LOCALAPPDATA="$(cygpath -w "$(cygpath -u "$host_profile")/AppData/Local")"
-    "$windows_powershell" "$@"
-)
-
-host_profile=$(run_host_powershell "$host_profile_hint" -NoProfile -NonInteractive -Command '
+host_profile=$(windows_run_host_powershell \
+    "$host_profile_hint" \
+    "$host_app_data_hint" \
+    "$host_local_app_data_hint" \
+    -NoProfile -NonInteractive -Command '
 {{ includeTemplate "lib/windows-host-profile.ps1.tmpl" . }}
 ') || fail "Cannot resolve the registered Windows host profile"
 win_home=$(cygpath -u "$(printf '%s' "$host_profile" | tr -d '\r')")
