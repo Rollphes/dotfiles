@@ -13,6 +13,14 @@ function Invoke-Probe([string] $Tool, [string[]] $Arguments) {
     return $output
 }
 $developmentHome = Native-Path $env:HOME
+$hostProfileHint = [string]::Concat($env:HOMEDRIVE, $env:HOMEPATH)
+if (
+    $hostProfileHint -notmatch '^[A-Za-z]:[\\/]' -or
+    (Native-Path $hostProfileHint) -ieq $developmentHome
+) {
+    throw "HOMEDRIVE/HOMEPATH do not identify the Windows host profile: $hostProfileHint"
+}
+Write-Output "windows.hostProfileHint=$hostProfileHint"
 function Assert-Contained([string] $Name, [string] $Path) {
     if (-not $Path -or $Path -notmatch '^[A-Za-z]:[\\/]') { throw "$Name is not a native absolute path: $Path" }
     $full = Native-Path $Path

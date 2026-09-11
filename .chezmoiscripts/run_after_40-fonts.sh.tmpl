@@ -15,16 +15,93 @@ if ! command -v powershell.exe >/dev/null 2>&1; then
     console_failed "$component"
     exit 1
 fi
-windows_local_app_data="$(
-    powershell.exe -NoProfile -NonInteractive -Command \
-        '(Get-ItemProperty -LiteralPath "Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders" -Name "Local AppData" -ErrorAction Stop)."Local AppData"' \
-        | tr -d '\r'
-)"
-if [ -z "$windows_local_app_data" ]; then
-    console_status "ERROR" "LocalApplicationData" "path" "not found"
+
+# Font registration belongs to the Windows host profile. Starting PowerShell
+# with the virtualized development USERPROFILE can initialize
+# USERPROFILE\AppData\Roaming even when APPDATA points at XDG_CONFIG_HOME.
+# Bootstrap from the login environment, verify the registered profile, then
+# scope the host profile variables to font-only PowerShell children.
+host_profile_hint="${HOMEDRIVE:-}${HOMEPATH:-}"
+if [ -z "$host_profile_hint" ]; then
+    console_status "ERROR" "Windows host profile" "path" "HOMEDRIVE/HOMEPATH unavailable"
     console_failed "$component"
     exit 1
 fi
+
+host_profile_hint="$(cygpath -w "$(cygpath -u "$host_profile_hint")")"
+development_home="$(cygpath -u "{{ .chezmoi.destDir }}")"
+if [ "$(cygpath -u "$host_profile_hint")" = "$development_home" ]; then
+    console_status "ERROR" "Windows host profile" "path" "matches development home"
+    console_failed "$component"
+    exit 1
+fi
+host_app_data_hint="$(cygpath -w "$(cygpath -u "$host_profile_hint")/AppData/Roaming")"
+host_local_app_data_hint="$(cygpath -w "$(cygpath -u "$host_profile_hint")/AppData/Local")"
+
+run_host_powershell() (
+    host_profile=$1
+    host_app_data=$2
+    host_local_app_data=$3
+    shift 3
+
+    export USERPROFILE="$host_profile"
+    export APPDATA="$host_app_data"
+    export LOCALAPPDATA="$host_local_app_data"
+    powershell.exe "$@"
+)
+
+windows_host_profile="$(
+    run_host_powershell \
+        "$host_profile_hint" \
+        "$host_app_data_hint" \
+        "$host_local_app_data_hint" \
+        -NoProfile -NonInteractive -Command '
+{{ includeTemplate "lib/windows-host-profile.ps1.tmpl" . }}
+' | tr -d '\r'
+)"
+if [ -z "$windows_host_profile" ]; then
+    console_status "ERROR" "Windows host profile" "path" "not found"
+    console_failed "$component"
+    exit 1
+fi
+if [ "$(cygpath -u "$windows_host_profile")" = "$development_home" ]; then
+    console_status "ERROR" "Windows host profile" "path" "matches development home"
+    console_failed "$component"
+    exit 1
+fi
+
+windows_host_app_data="$(
+    run_host_powershell \
+        "$windows_host_profile" \
+        "$host_app_data_hint" \
+        "$host_local_app_data_hint" \
+        -NoProfile -NonInteractive -Command \
+        '(Get-ItemProperty -LiteralPath "Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders" -Name "AppData" -ErrorAction Stop)."AppData"' \
+        | tr -d '\r'
+)"
+windows_local_app_data="$(
+    run_host_powershell \
+        "$windows_host_profile" \
+        "$windows_host_app_data" \
+        "$host_local_app_data_hint" \
+        -NoProfile -NonInteractive -Command \
+        '(Get-ItemProperty -LiteralPath "Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders" -Name "Local AppData" -ErrorAction Stop)."Local AppData"' \
+        | tr -d '\r'
+)"
+if [ -z "$windows_host_app_data" ] || [ -z "$windows_local_app_data" ]; then
+    console_status "ERROR" "Windows host AppData" "path" "not found"
+    console_failed "$component"
+    exit 1
+fi
+for host_app_data in "$windows_host_app_data" "$windows_local_app_data"; do
+    case "$(cygpath -u "$host_app_data")/" in
+        "$development_home"/*)
+            console_status "ERROR" "Windows host AppData" "path" "inside development home"
+            console_failed "$component"
+            exit 1
+            ;;
+    esac
+done
 font_dir="$(cygpath -u "$windows_local_app_data")/Microsoft/Windows/Fonts"
 {{ else if eq .chezmoi.os "darwin" -}}
 font_dir="$HOME/Library/Fonts"
@@ -79,7 +156,11 @@ family_matches() (
             while IFS= read -r file; do
                 [ -n "$file" ] && cygpath -w "$file" >> "$native_list"
             done < "$files"
-            powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass \
+            run_host_powershell \
+                "$windows_host_profile" \
+                "$windows_host_app_data" \
+                "$windows_local_app_data" \
+                -NoProfile -NonInteractive -ExecutionPolicy Bypass \
                 -File "$(cygpath -w "$windows_helper")" \
                 -Mode "$mode" \
                 -Family "$expected_family" \
@@ -227,7 +308,11 @@ install_font() (
     while IFS= read -r name; do
         cygpath -w "$font_dir/$name" >> "$paths_file"
     done < "$names_file"
-    powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass \
+    run_host_powershell \
+        "$windows_host_profile" \
+        "$windows_host_app_data" \
+        "$windows_local_app_data" \
+        -NoProfile -NonInteractive -ExecutionPolicy Bypass \
         -File "$(cygpath -w "$windows_helper")" \
         -Mode Register \
         -Family "$expected_family" \
