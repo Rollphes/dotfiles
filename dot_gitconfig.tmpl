@@ -17,18 +17,31 @@
 
 {{ if eq .chezmoi.os "windows" -}}
 {{ $msysHome := .chezmoi.destDir | replace "C:/" "/c/" -}}
+{{ $nativeHome := .chezmoi.destDir | replace "\\" "/" -}}
 [http]
     sslBackend = openssl
 
+# mise asks Git for both github.com and api.github.com credentials. Keep both
+# lookups on the managed gh helper, and restate the development contract at
+# this native-child boundary so the gh shim's nested mise cannot use Windows
+# Known Folder defaults.
 [credential "https://github.com"]
     helper =
-    helper = !PATH='{{ $msysHome }}/.local/bin':$PATH '{{ $msysHome }}/.local/share/mise/shims/gh.exe' auth git-credential
+    helper = !HOME='{{ $nativeHome }}' USERPROFILE='{{ $nativeHome }}' APPDATA='{{ $nativeHome }}/.config' LOCALAPPDATA='{{ $nativeHome }}/.local/share' TEMP='C:/msys64/tmp' TMP='C:/msys64/tmp' XDG_CONFIG_HOME='{{ $nativeHome }}/.config' XDG_DATA_HOME='{{ $nativeHome }}/.local/share' XDG_STATE_HOME='{{ $nativeHome }}/.local/state' XDG_CACHE_HOME='{{ $nativeHome }}/.cache' MISE_CONFIG_DIR='{{ $nativeHome }}/.config/mise' MISE_DATA_DIR='{{ $nativeHome }}/.local/share/mise' MISE_STATE_DIR='{{ $nativeHome }}/.local/state/mise' MISE_CACHE_DIR='{{ $nativeHome }}/.cache/mise' MISE_TMP_DIR='{{ $nativeHome }}/.cache/mise/tmp' PATH='{{ $msysHome }}/.local/bin':$PATH '{{ $msysHome }}/.local/share/mise/shims/gh.exe' auth git-credential
+
+[credential "https://api.github.com"]
+    helper =
+    helper = !HOME='{{ $nativeHome }}' USERPROFILE='{{ $nativeHome }}' APPDATA='{{ $nativeHome }}/.config' LOCALAPPDATA='{{ $nativeHome }}/.local/share' TEMP='C:/msys64/tmp' TMP='C:/msys64/tmp' XDG_CONFIG_HOME='{{ $nativeHome }}/.config' XDG_DATA_HOME='{{ $nativeHome }}/.local/share' XDG_STATE_HOME='{{ $nativeHome }}/.local/state' XDG_CACHE_HOME='{{ $nativeHome }}/.cache' MISE_CONFIG_DIR='{{ $nativeHome }}/.config/mise' MISE_DATA_DIR='{{ $nativeHome }}/.local/share/mise' MISE_STATE_DIR='{{ $nativeHome }}/.local/state/mise' MISE_CACHE_DIR='{{ $nativeHome }}/.cache/mise' MISE_TMP_DIR='{{ $nativeHome }}/.cache/mise/tmp' PATH='{{ $msysHome }}/.local/bin':$PATH '{{ $msysHome }}/.local/share/mise/shims/gh.exe' auth git-credential
 
 [credential "https://gist.github.com"]
     helper =
-    helper = !PATH='{{ $msysHome }}/.local/bin':$PATH '{{ $msysHome }}/.local/share/mise/shims/gh.exe' auth git-credential
+    helper = !HOME='{{ $nativeHome }}' USERPROFILE='{{ $nativeHome }}' APPDATA='{{ $nativeHome }}/.config' LOCALAPPDATA='{{ $nativeHome }}/.local/share' TEMP='C:/msys64/tmp' TMP='C:/msys64/tmp' XDG_CONFIG_HOME='{{ $nativeHome }}/.config' XDG_DATA_HOME='{{ $nativeHome }}/.local/share' XDG_STATE_HOME='{{ $nativeHome }}/.local/state' XDG_CACHE_HOME='{{ $nativeHome }}/.cache' MISE_CONFIG_DIR='{{ $nativeHome }}/.config/mise' MISE_DATA_DIR='{{ $nativeHome }}/.local/share/mise' MISE_STATE_DIR='{{ $nativeHome }}/.local/state/mise' MISE_CACHE_DIR='{{ $nativeHome }}/.cache/mise' MISE_TMP_DIR='{{ $nativeHome }}/.cache/mise/tmp' PATH='{{ $msysHome }}/.local/bin':$PATH '{{ $msysHome }}/.local/share/mise/shims/gh.exe' auth git-credential
 {{ else -}}
 [credential "https://github.com"]
+    helper =
+    helper = !'{{ .chezmoi.destDir }}/.local/share/mise/shims/gh' auth git-credential
+
+[credential "https://api.github.com"]
     helper =
     helper = !'{{ .chezmoi.destDir }}/.local/share/mise/shims/gh' auth git-credential
 

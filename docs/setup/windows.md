@@ -150,7 +150,10 @@ gh auth status
 ```
 
 The Windows Git config is a symlink to the canonical config in the MSYS2
-home. The managed credential helper calls the stable mise shim.
+home. The managed credential helper calls the stable mise shim. GitHub's web,
+API and gist credential contexts reset inherited helpers independently. Each
+helper invocation restates the canonical HOME, XDG, mise and MSYS2 temp paths
+because the gh shim starts a nested native mise process.
 
 ## 5. Install WezTerm Nightly
 
