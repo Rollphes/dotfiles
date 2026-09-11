@@ -21,6 +21,13 @@ function Run-Case([string] $Name, [scriptblock] $Mutation, [bool] $ShouldFail) {
     $active = Get-Content (Join-Path $state 'active.json') -Raw | ConvertFrom-Json
     $policy = Get-Content (Join-Path $active.sessionDirectory 'policy.json') -Raw | ConvertFrom-Json
     if (($policy.decision -eq 'fail') -ne $ShouldFail) { throw "Unexpected policy: $Name" }
+    $report = @(Get-Content (Join-Path $active.sessionDirectory 'report.txt'))
+    if ($report -notcontains 'POLICY VIOLATIONS:') { throw "Missing policy violation section: $Name" }
+    foreach ($violation in @($policy.violations)) {
+        $expected = "  $($violation.status.ToUpperInvariant()) [$($violation.root)]: $($violation.path)"
+        if ($report -notcontains $expected) { throw "Missing policy violation entry: $Name ($expected)" }
+    }
+    if (-not $ShouldFail -and $report -notcontains '  None') { throw "Missing empty policy result: $Name" }
     Write-Output "PASS: $Name"
 }
 $nested = Join-Path $hostRoot 'arbitrary-tool\nested'
@@ -34,8 +41,12 @@ Run-Case 'new-unknown-tool' { New-Item -ItemType Directory (Join-Path $hostRoot 
 Run-Case 'host-temp' { Set-Content (Join-Path $hostTemp 'arbitrary-state') 'x' } $true
 Run-Case 'host-roaming' { $dir=Join-Path $hostRoot 'AppData\Roaming\unknown-tool'; New-Item -ItemType Directory $dir -Force | Out-Null; Set-Content (Join-Path $dir 'state') 'x' } $true
 Run-Case 'host-locallow' { $dir=Join-Path $hostRoot 'AppData\LocalLow\unknown-tool'; New-Item -ItemType Directory $dir -Force | Out-Null; Set-Content (Join-Path $dir 'state') 'x' } $true
-$startupCache = Join-Path $hostRoot 'AppData\Local\Microsoft\Windows\PowerShell\StartupProfileData-NonInteractive'
+$startupCache = Join-Path $hostRoot 'AppData\Local\Microsoft\PowerShell\StartupProfileData-NonInteractive'
 Run-Case 'managed-host-powershell-startup-cache' { New-Item -ItemType Directory (Split-Path $startupCache) -Force | Out-Null; Set-Content $startupCache 'x' } $false
+Run-Case 'host-powershell-cache-sibling' { Set-Content (Join-Path (Split-Path $startupCache) 'unknown.state') 'x' } $true
+$usrClassLog = Join-Path $hostRoot 'AppData\Local\Microsoft\Windows\UsrClass.dat.LOG1'
+Run-Case 'host-registry-log' { New-Item -ItemType Directory (Split-Path $usrClassLog) -Force | Out-Null; Set-Content $usrClassLog 'x' } $false
+Run-Case 'host-registry-log-sibling' { Set-Content (Join-Path (Split-Path $usrClassLog) 'unknown.LOG1') 'x' } $true
 $savedGithubActions = $env:GITHUB_ACTIONS
 $savedRunnerEnvironment = $env:RUNNER_ENVIRONMENT
 try {

@@ -365,6 +365,14 @@ function New-Report {
     $lines.Add("CONTENT HASHING: $($Metadata.hashFiles)")
     $policy = Write-PolicyResult $Metadata $Diffs
     $lines.Add("MANAGED HOST ASSET CHANGES: $(@($policy.managedHostAssets).Count)")
+    $lines.Add('POLICY VIOLATIONS:')
+    if (@($policy.violations).Count) {
+        foreach ($violation in @($policy.violations)) {
+            $lines.Add("  $($violation.status.ToUpperInvariant()) [$($violation.root)]: $($violation.path)")
+        }
+    } else {
+        $lines.Add('  None')
+    }
     $lines.Add("POLICY: $($policy.decision) ($(@($policy.violations).Count) forbidden writes)")
     $reportPath = Join-Path $Metadata.sessionDirectory 'report.txt'
     $lines | Set-Content -LiteralPath $reportPath -Encoding utf8
@@ -492,10 +500,9 @@ switch ($Command) {
                 osStateExclusions = @(Get-OSStateExclusions $hostProfilePath) + @(
                     # Observed inaccessible Windows performance assessment state.
                     (Join-Path $hostTempPath 'WinSAT'),
-                    # Host-scoped font and bridge PowerShell children update this
-                    # exact native startup cache. The canonical counterpart is
-                    # deliberately still monitored as forbidden AppData.
-                    (Join-Path $hostLocalPath 'Microsoft\Windows\PowerShell\StartupProfileData-NonInteractive')
+                    # Observed host registry log and PowerShell startup cache.
+                    (Join-Path $hostLocalPath 'Microsoft\Windows\UsrClass.dat.LOG1'),
+                    (Join-Path $hostLocalPath 'Microsoft\PowerShell\StartupProfileData-NonInteractive')
                 )
                 runnerStateExclusions = @(Get-RunnerStateExclusions $hostProfilePath $hostLocalPath)
                 policy = 'New, modified, metadataOnly host or canonical AppData entries fail except manifest-managed fonts and their containers; deleted entries are informational.'

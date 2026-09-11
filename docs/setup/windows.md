@@ -228,11 +228,11 @@ metadata, canonical home outside its forbidden `AppData` root, and audit state
 are excluded. Locked Windows NTUSER
 registry hive, journal and transaction filenames observed during validation are
 separately recorded as OS exclusions, along with the observed inaccessible host
-Temp `WinSAT` directory. The exact host Local AppData file
-`Microsoft\Windows\PowerShell\StartupProfileData-NonInteractive` is also
-excluded because the managed font and bridge operations launch host-scoped
-PowerShell children that update it. Its counterpart below canonical `AppData`
-remains forbidden. On a GitHub-hosted runner only, the two OS cache roots
+Temp `WinSAT` directory. The observed host registry log
+`Microsoft\Windows\UsrClass.dat.LOG1` and PowerShell startup cache
+`Microsoft\PowerShell\StartupProfileData-NonInteractive` are also excluded.
+Their counterparts below canonical `AppData` remain forbidden. On a
+GitHub-hosted runner only, the two OS cache roots
 observed in run `34536176054` are also excluded:
 `Microsoft\Windows\WebCache` below host Local AppData and
 `AppData\LocalLow\Microsoft\CryptnetUrlCache` below the host profile. The
@@ -245,7 +245,8 @@ managed host assets; the font verification checks their contents and registratio
 `metadataOnly` forbidden entries fail `audit stop` and the CI verifier. `deleted`
 alone is informational; a surviving parent timestamp change still counts as a
 write. A snapshot error is a coverage failure, never PASS. Reports show counts,
-a bounded preview and the policy decision. This is a before/after filesystem
+a bounded diff preview, every policy violation and the policy decision. This is
+a before/after filesystem
 audit, not a process tracer: temporary writes removed before stop, arbitrary
 unmonitored volumes and unrelated host application activity require separate
 investigation. Keep the audit window focused; do not suppress unknown churn with
