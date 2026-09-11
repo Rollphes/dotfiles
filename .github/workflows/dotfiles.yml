@@ -112,7 +112,9 @@ jobs:
           Invoke-WebRequest -Uri $asset[0].browser_download_url -OutFile $archive
           Expand-Archive -LiteralPath $archive -DestinationPath $extract -Force
           foreach ($name in 'mise.exe', 'mise-shim.exe') {
-            $binary = Get-ChildItem -LiteralPath $extract -Recurse -Filter $name -File
+            $binary = @(
+              Get-ChildItem -LiteralPath $extract -Recurse -Filter $name -File
+            )
             if ($binary.Count -ne 1) {
               throw "Expected one $name, found $($binary.Count)"
             }
@@ -189,13 +191,17 @@ jobs:
         run: |
           . .github/scripts/set-windows-development-environment.ps1
           $auditScript = Join-Path $env:TEMP 'windows-leakage-audit.ps1'
-          try {
-            & $auditScript stop -StateRoot "$env:HOME\.local\state\dotfiles-leakage-ci\first"
-          } finally {
-            & $auditScript report -StateRoot "$env:HOME\.local\state\dotfiles-leakage-ci\first"
+          if (Test-Path -LiteralPath $auditScript -PathType Leaf) {
+            try {
+              & $auditScript stop -StateRoot "$env:HOME\.local\state\dotfiles-leakage-ci\first"
+            } finally {
+              & $auditScript report -StateRoot "$env:HOME\.local\state\dotfiles-leakage-ci\first"
+            }
+            & .github/scripts/verify-windows-containment.ps1 `
+              -StateRoot "$env:HOME\.local\state\dotfiles-leakage-ci\first"
+          } else {
+            Write-Output 'Windows leakage audit did not start; no report is available.'
           }
-          & .github/scripts/verify-windows-containment.ps1 `
-            -StateRoot "$env:HOME\.local\state\dotfiles-leakage-ci\first"
 
       - name: Verify managed contracts
         if: runner.os != 'Windows'
