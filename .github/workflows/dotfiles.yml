@@ -263,10 +263,14 @@ jobs:
           mise --version
           rustup show active-toolchain
           & C:\msys64\usr\bin\env.exe `
+            "HOME=$env:DOTFILES_CI_HOST_PROFILE" `
             "USERPROFILE=$env:DOTFILES_CI_HOST_PROFILE" `
             "APPDATA=$env:DOTFILES_CI_HOST_APPDATA" `
             "LOCALAPPDATA=$env:DOTFILES_CI_HOST_LOCALAPPDATA" `
-            pwsh.exe -NoProfile -File .github/scripts/verify-fonts.ps1
+            pwsh.exe `
+              -NoProfile `
+              -File .github/scripts/verify-fonts.ps1 `
+              -DevelopmentHome $env:HOME
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
           $rustupCommand = Get-Command rustup -CommandType Application |

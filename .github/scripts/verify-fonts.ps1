@@ -1,3 +1,8 @@
+param(
+    [Parameter(Mandatory)]
+    [string] $DevelopmentHome
+)
+
 $ErrorActionPreference = 'Stop'
 
 $manifest = Get-Content '.chezmoidata/fonts.json' -Raw | ConvertFrom-Json
@@ -5,7 +10,7 @@ $manifest = Get-Content '.chezmoidata/fonts.json' -Raw | ConvertFrom-Json
 $hostLocal = Get-ItemPropertyValue -LiteralPath 'Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders' -Name 'Local AppData'
 if (-not $hostLocal) { throw 'Cannot resolve host font directory' }
 $fontDirectory = Join-Path $hostLocal 'Microsoft\Windows\Fonts'
-$stateDirectory = Join-Path $env:HOME '.local\state\dotfiles-fonts'
+$stateDirectory = Join-Path $DevelopmentHome '.local\state\dotfiles-fonts'
 $registryKey = 'HKCU:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts'
 
 Add-Type -AssemblyName System.Drawing

@@ -10,8 +10,9 @@ state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles-fonts"
 
 {{ if eq .chezmoi.os "windows" -}}
 font_os="windows"
-if ! command -v powershell.exe >/dev/null 2>&1; then
-    console_status "ERROR" "powershell.exe" "tool" "not found"
+windows_powershell="$(cygpath -u "${WINDIR:?}")/System32/WindowsPowerShell/v1.0/powershell.exe"
+if [ ! -x "$windows_powershell" ]; then
+    console_status "ERROR" "$windows_powershell" "tool" "not found"
     console_failed "$component"
     exit 1
 fi
@@ -44,10 +45,11 @@ run_host_powershell() (
     host_local_app_data=$3
     shift 3
 
+    export HOME="$host_profile"
     export USERPROFILE="$host_profile"
     export APPDATA="$host_app_data"
     export LOCALAPPDATA="$host_local_app_data"
-    powershell.exe "$@"
+    "$windows_powershell" "$@"
 )
 
 windows_host_profile="$(
