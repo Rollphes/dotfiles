@@ -177,9 +177,11 @@ The audit leaves no background process running. Reports and snapshots are kept
 under `$XDG_STATE_HOME/dotfiles-leakage-audit`.
 
 The development process tree uses POSIX `HOME=/home/<username>` and native
-`USERPROFILE=C:\msys64\home\<username>`. `APPDATA` and `LOCALAPPDATA` are
-`USERPROFILE\AppData\Roaming` and `USERPROFILE\AppData\Local`; `TEMP` and `TMP`
-resolve to `C:\msys64\tmp`. Fish exports profile paths in native form explicitly.
+`USERPROFILE=C:\msys64\home\<username>`. Native `APPDATA` maps directly to
+`XDG_CONFIG_HOME` (`USERPROFILE\.config`) and `LOCALAPPDATA` maps to
+`XDG_DATA_HOME` (`USERPROFILE\.local\share`); no development `AppData` tree is
+part of the contract. `TEMP` and `TMP` resolve to `C:\msys64\tmp`. Fish exports
+profile paths in native form explicitly.
 Apply scripts use the chezmoi destination as HOME, and the mise subprocess also
 converts XDG and tool-specific variables before starting native descendants.
 WezTerm's native development shells use the same profile authority.
@@ -188,6 +190,11 @@ This is process-local. Windows login settings, Known Folders and the host GUI
 profile remain unchanged. Managed bridges still originate in the registered
 Windows login profile. Managed user fonts remain in the registered host Local
 AppData folder. No runtime data is migrated or deleted by this change.
+
+The current MSYS2 Atuin package calls Windows Known Folders through its Rust
+`directories` dependency and cannot initialize under the virtualized development
+profile. Windows therefore does not install or activate Atuin. An already
+installed package is left untouched; Fish does not invoke it on Windows.
 
 On Windows, mise's aqua GitHub artifact-attestation check is disabled. Its
 sigstore-rust dependency resolves the TUF cache through Windows Known Folders,
@@ -203,12 +210,14 @@ For a command whose intended project lies inside a monitored host root, pass
 that exact project path with `-WorkspaceRoots` at start. No workspace is guessed
 or globally exported; a path hiding an entire monitored root is rejected.
 
-Snapshots recursively monitor the host profile, Local/Roaming AppData, and host
-temp, including ordinary directory names such as `go`. They never descend into
+Snapshots recursively monitor the host profile, Local/Roaming AppData, host
+temp, and the retired `AppData` root below the canonical development home,
+including ordinary directory names such as `go`. They never descend into
 reparse points. When parent enumeration yields a `.ssh` entry, the audit rejects
 it before querying that entry or traversing inside it; it does not inspect its
 existence, metadata, contents or children. Managed bridges, their container
-metadata, canonical home and audit state are excluded. Locked Windows NTUSER
+metadata, canonical home outside its forbidden `AppData` root, and audit state
+are excluded. Locked Windows NTUSER
 registry hive, journal and transaction filenames observed during validation are
 separately recorded as OS exclusions, along with the observed inaccessible host
 Temp `WinSAT` directory. On a GitHub-hosted runner only, the two OS cache roots
@@ -236,10 +245,10 @@ timestamps are outside detection coverage.
 Reports show at most 50 entries per status; full CSV/JSON evidence remains in the
 session directory and is uploaded as a Windows CI artifact even on failure.
 
-Go uses its native defaults under the development profile: `go`,
-`AppData\Local\go-build`, and `AppData\Roaming\go`. npm cache also resolves under
-development Local AppData. No extra Go environment overrides are required by the
-validated resolvers. Runtime probes in `.github/scripts/probe-windows-runtime.ps1`
+Go keeps the platform-neutral defaults `go`, `go\pkg\mod`, and `.config\go\env`;
+`GOCACHE` is fixed to `.cache\go-build`. npm cache is fixed to `.cache\npm`, while
+tree-sitter parser data follows `LOCALAPPDATA` into `.local\share\tree-sitter`.
+Runtime probes in `.github/scripts/probe-windows-runtime.ps1`
 exercise the native child environment without reinstalling tools or loading user
 Neovim configuration. GitHub Actions excludes Go and the `go:*` backend from the
 rendered mise toolset; its runtime probe checks that exclusion and skips only the

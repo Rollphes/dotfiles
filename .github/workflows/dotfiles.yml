@@ -66,8 +66,8 @@ jobs:
           $msysTemp = 'C:\msys64\tmp'
           New-Item -ItemType Directory -Force -Path $msysHome, $msysTemp | Out-Null
           "USERPROFILE=$msysHome" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
-          "APPDATA=$msysHome\AppData\Roaming" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
-          "LOCALAPPDATA=$msysHome\AppData\Local" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "APPDATA=$xdgConfigHome" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "LOCALAPPDATA=$xdgDataHome" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           "HOME=$msysHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "CARGO_HOME=$cargoHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "RUSTUP_HOME=$rustupHome" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
@@ -78,6 +78,8 @@ jobs:
           "TEMP=$msysTemp" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "TMP=$msysTemp" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "GHQ_ROOT=$msysHome\ghq" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "GOCACHE=$xdgCacheHome\go-build" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "NPM_CONFIG_CACHE=$xdgCacheHome\npm" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "MISE_CONFIG_DIR=$xdgConfigHome\mise" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "MISE_DATA_DIR=$xdgDataHome\mise" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "MISE_STATE_DIR=$xdgStateHome\mise" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
@@ -85,7 +87,6 @@ jobs:
           "MISE_TMP_DIR=$xdgCacheHome\mise\tmp" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "AUBE_CACHE_DIR=$xdgCacheHome\aube" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "AUBE_STORE_DIR=$xdgDataHome\aube\store" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "ATUIN_CONFIG_DIR=$xdgConfigHome\atuin" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "UV_CACHE_DIR=$xdgCacheHome\uv" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "UV_TOOL_DIR=$xdgDataHome\uv\tools" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "UV_PYTHON_INSTALL_DIR=$xdgDataHome\uv\python" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
@@ -283,16 +284,18 @@ jobs:
           ).Trim()
           $fishEnvironment = @(
             & 'C:\msys64\usr\bin\env.exe' `
+              'PATH=' `
               "XDG_CONFIG_HOME=$fishConfigHome" `
               'C:\msys64\usr\bin\fish.exe' `
               -c @'
-          printf '%s\n' "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$APPDATA" "$LOCALAPPDATA" "$TEMP" "$TMP" "$GHQ_ROOT" "$MISE_CONFIG_DIR" "$MISE_DATA_DIR" "$MISE_STATE_DIR" "$MISE_CACHE_DIR" "$MISE_TMP_DIR" "$AUBE_CACHE_DIR" "$AUBE_STORE_DIR" "$ATUIN_CONFIG_DIR" "$UV_CACHE_DIR" "$UV_TOOL_DIR" "$UV_PYTHON_INSTALL_DIR" "$_ZO_DATA_DIR" "$HOME" "$USERPROFILE"
+          printf '%s\n' "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$APPDATA" "$LOCALAPPDATA" "$TEMP" "$TMP" "$GHQ_ROOT" "$GOCACHE" "$NPM_CONFIG_CACHE" "$MISE_CONFIG_DIR" "$MISE_DATA_DIR" "$MISE_STATE_DIR" "$MISE_CACHE_DIR" "$MISE_TMP_DIR" "$AUBE_CACHE_DIR" "$AUBE_STORE_DIR" "$UV_CACHE_DIR" "$UV_TOOL_DIR" "$UV_PYTHON_INSTALL_DIR" "$_ZO_DATA_DIR" "$HOME" "$USERPROFILE"
+          command -s cygpath
           '@
           )
           $emptyEnvironment = @(
             $fishEnvironment | Where-Object { [string]::IsNullOrWhiteSpace($_) }
           )
-          if ($fishEnvironment.Count -ne 23 -or $emptyEnvironment.Count -ne 0) {
+          if ($fishEnvironment.Count -ne 25 -or $emptyEnvironment.Count -ne 0) {
             throw "Unexpected Fish environment output: $($fishEnvironment.Count) values"
           }
           $expectedEnvironment = @(
@@ -300,11 +303,13 @@ jobs:
             "$env:HOME\.local\share",
             "$env:HOME\.local\state",
             "$env:HOME\.cache",
-            "$env:HOME\AppData\Roaming",
-            "$env:HOME\AppData\Local",
+            "$env:HOME\.config",
+            "$env:HOME\.local\share",
             'C:\msys64\tmp',
             'C:\msys64\tmp',
             "$env:HOME\ghq",
+            "$env:HOME\.cache\go-build",
+            "$env:HOME\.cache\npm",
             "$env:HOME\.config\mise",
             "$env:HOME\.local\share\mise",
             "$env:HOME\.local\state\mise",
@@ -312,13 +317,13 @@ jobs:
             "$env:HOME\.cache\mise\tmp",
             "$env:HOME\.cache\aube",
             "$env:HOME\.local\share\aube\store",
-            "$env:HOME\.config\atuin",
             "$env:HOME\.cache\uv",
             "$env:HOME\.local\share\uv\tools",
             "$env:HOME\.local\share\uv\python",
             "$env:HOME\.local\share\zoxide",
             $env:HOME,
-            $env:HOME
+            $env:HOME,
+            'C:\msys64\usr\bin\cygpath.exe'
           ) | ForEach-Object { [IO.Path]::GetFullPath($_) }
           $actualEnvironment = $fishEnvironment | ForEach-Object {
             [IO.Path]::GetFullPath(

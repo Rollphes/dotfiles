@@ -25,7 +25,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$MonitoredRootIds = @('hostProfile', 'local', 'roaming', 'temp')
+$MonitoredRootIds = @('hostProfile', 'local', 'roaming', 'temp', 'canonicalAppData')
 $DefaultManagedBridgePaths = @(
 {{ range .windows.bridges -}}
     '{{ .path }}'
@@ -155,12 +155,20 @@ public static class AuditSnapshotWriter
 
     public static void WriteRecursive(string root, string output, bool hashFiles, string[] excludedRoots)
     {
+        WriteRecursive(root, output, hashFiles, excludedRoots, false);
+    }
+
+    public static void WriteRecursive(string root, string output, bool hashFiles, string[] excludedRoots, bool includeRoot)
+    {
         using (var writer = NewWriter(output))
         {
             if (IsExcluded(root, excludedRoots ?? Array.Empty<string>()))
                 throw new InvalidOperationException("Snapshot root is excluded");
             if (Directory.Exists(root))
+            {
+                if (includeRoot) WriteEntry(writer, root, ".", hashFiles);
                 WriteTree(writer, root, root, "", hashFiles, excludedRoots ?? Array.Empty<string>());
+            }
         }
     }
 
@@ -252,11 +260,13 @@ function New-SnapshotSet {
     foreach ($id in $MonitoredRootIds) {
         $exclusions = @($Metadata.managedBridgeRoots) + @($Metadata.osStateExclusions) +
             @($Metadata.runnerStateExclusions) + @($Metadata.workspaceRoots) +
-            @($Metadata.roots.canonicalHome, $Metadata.auditStateRoot)
+            @($Metadata.auditStateRoot)
+        if ($id -ne 'canonicalAppData') { $exclusions += $Metadata.roots.canonicalHome }
         if ($id -eq 'hostProfile') { $exclusions += @($Metadata.roots.local, $Metadata.roots.roaming, $Metadata.roots.temp) }
         if ($id -eq 'local') { $exclusions += $Metadata.roots.temp }
         [AuditSnapshotWriter]::WriteRecursive(
-            $Metadata.roots.$id, (Join-Path $Directory "$id.csv"), $Metadata.hashFiles, [string[]]$exclusions
+            $Metadata.roots.$id, (Join-Path $Directory "$id.csv"), $Metadata.hashFiles, [string[]]$exclusions,
+            ($id -eq 'canonicalAppData')
         )
     }
 }
@@ -339,6 +349,7 @@ function New-Report {
     Add-DiffSection $lines 'HOST ROAMING LEAKAGE CANDIDATE' $Diffs.roaming
     Add-DiffSection $lines 'HOST TEMP USAGE' $Diffs.temp
     Add-DiffSection $lines 'HOST PROFILE WRITES' $Diffs.hostProfile
+    Add-DiffSection $lines 'RETIRED CANONICAL APPDATA WRITES' $Diffs.canonicalAppData
     $lines.Add('MANAGED BRIDGE')
     $lines.Add('  Excluded from host-profile leakage candidates:')
     foreach ($path in @($Metadata.managedBridgeRoots)) { $lines.Add("    $path") }
@@ -400,6 +411,7 @@ function Read-DiffSet {
 }
 
 $canonicalHomePath = Resolve-CanonicalHome
+$canonicalAppDataPath = Resolve-FullPath (Join-Path $canonicalHomePath 'AppData')
 $auditStateRoot = Resolve-StateRoot $canonicalHomePath
 if ($Command -eq 'start') {
     $hostProfilePath = Resolve-HostProfile
@@ -416,7 +428,7 @@ if ($Command -eq 'start') {
 } else {
     $savedSession = Resolve-SessionDirectory $auditStateRoot -RequireActive
     $savedMetadata = Read-JsonFile (Join-Path $savedSession 'metadata.json')
-    if ($savedMetadata.schemaVersion -ne 3) { throw 'Obsolete audit schema; start a new audit session with the current script.' }
+    if ($savedMetadata.schemaVersion -ne 4) { throw 'Obsolete audit schema; start a new audit session with the current script.' }
     $hostProfilePath = Resolve-FullPath $savedMetadata.roots.hostProfile
     $HostTemp = $savedMetadata.roots.temp
     $hostLocalPath = $savedMetadata.roots.local
@@ -436,7 +448,7 @@ foreach ($root in $hostTempPath, $hostLocalPath, $hostRoamingPath) {
 }
 $workspacePaths = @($WorkspaceRoots | ForEach-Object { Resolve-FullPath $_ })
 foreach ($workspacePath in $workspacePaths) {
-    foreach ($monitoredRoot in $hostProfilePath, $hostLocalPath, $hostRoamingPath, $hostTempPath) {
+    foreach ($monitoredRoot in $hostProfilePath, $hostLocalPath, $hostRoamingPath, $hostTempPath, $canonicalAppDataPath) {
         if (Test-PathWithin $monitoredRoot $workspacePath) {
             throw "A workspace must not hide an entire monitored root: $workspacePath"
         }
@@ -457,7 +469,7 @@ switch ($Command) {
         $metadata = [ordered]@{}
         try {
             $metadata = [ordered]@{
-                schemaVersion = 3
+                schemaVersion = 4
                 sessionId = $sessionId
                 status = 'starting'
                 startedAtUtc = [DateTime]::UtcNow.ToString('o')
@@ -465,6 +477,7 @@ switch ($Command) {
                 sessionDirectory = $sessionDirectory
                 roots = [ordered]@{
                     canonicalHome = $canonicalHomePath
+                    canonicalAppData = $canonicalAppDataPath
                     hostProfile = $hostProfilePath
                     local = $hostLocalPath
                     roaming = $hostRoamingPath
@@ -481,8 +494,8 @@ switch ($Command) {
                     (Join-Path $hostTempPath 'WinSAT')
                 )
                 runnerStateExclusions = @(Get-RunnerStateExclusions $hostProfilePath $hostLocalPath)
-                policy = 'New, modified, metadataOnly host entries fail except manifest-managed fonts and their containers; deleted entries are informational.'
-                exclusions = @('Any .ssh path component before filesystem access', 'Managed bridges and their container metadata', 'Canonical home', 'Audit state', 'Explicit command workspaces', 'Observed GitHub-hosted runner OS cache roots')
+                policy = 'New, modified, metadataOnly host or canonical AppData entries fail except manifest-managed fonts and their containers; deleted entries are informational.'
+                exclusions = @('Any .ssh path component before filesystem access', 'Managed bridges and their container metadata', 'Canonical home except its forbidden AppData root', 'Audit state', 'Explicit command workspaces', 'Observed GitHub-hosted runner OS cache roots')
                 environment = [ordered]@{
                     HOME = $env:HOME; USERPROFILE = $env:USERPROFILE; APPDATA = $env:APPDATA
                     LOCALAPPDATA = $env:LOCALAPPDATA; TEMP = $env:TEMP; TMP = $env:TMP
@@ -522,7 +535,7 @@ switch ($Command) {
         Write-Output "Audit stopped: $sessionDirectory"
         Write-Output "Report: $reportPath"
         $policy = Read-JsonFile (Join-Path $sessionDirectory 'policy.json')
-        if ($policy.decision -ne 'pass') { throw "Forbidden host writes detected; see $reportPath" }
+        if ($policy.decision -ne 'pass') { throw "Forbidden containment writes detected; see $reportPath" }
     }
     'report' {
         $sessionDirectory = Resolve-SessionDirectory $auditStateRoot

@@ -52,6 +52,7 @@ try {
     if ($null -eq $savedRunnerEnvironment) { Remove-Item Env:RUNNER_ENVIRONMENT -ErrorAction SilentlyContinue } else { $env:RUNNER_ENVIRONMENT = $savedRunnerEnvironment }
 }
 Run-Case 'canonical-write' { Set-Content (Join-Path $canonical 'allowed-state') 'x' } $false
+Run-Case 'canonical-appdata' { New-Item -ItemType Directory (Join-Path $canonical 'AppData') | Out-Null } $true
 Run-Case 'explicit-workspace' { New-Item -ItemType Directory $fixtureWorkspace -Force | Out-Null; Set-Content (Join-Path $fixtureWorkspace 'source') 'x' } $false
 Run-Case 'workspace-sibling' { New-Item -ItemType Directory (Join-Path $hostRoot 'project-other') | Out-Null } $true
 $fontDir = Join-Path $hostRoot 'AppData\Local\Microsoft\Windows\Fonts'

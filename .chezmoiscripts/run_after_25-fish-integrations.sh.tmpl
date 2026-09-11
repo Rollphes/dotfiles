@@ -19,7 +19,12 @@ generate_init() (
     temp_file=$(mktemp "$cache_dir/.init.XXXXXX")
     trap 'rm -f "$temp_file"' EXIT INT TERM
 
-    if ! "$@" >"$temp_file"; then
+    if ! (
+{{ if eq .chezmoi.os "windows" -}}
+        msys2_export_native_environment
+{{ end -}}
+        "$@"
+    ) >"$temp_file"; then
         console_status "ERROR" "$(basename "$output_file")" "init" "generation failed"
         console_failed "$component"
         exit 1
@@ -34,8 +39,10 @@ console_context "$cache_dir"
 
 mkdir -p "$cache_dir"
 
+{{ if ne .chezmoi.os "windows" -}}
 generate_init "$cache_dir/atuin.fish" \
     atuin init fish --disable-up-arrow --disable-ai
+{{ end -}}
 generate_init "$cache_dir/carapace.fish" carapace _carapace fish
 generate_init "$cache_dir/fzf.fish" fzf --fish
 generate_init "$cache_dir/starship.fish" starship init fish --print-full-init

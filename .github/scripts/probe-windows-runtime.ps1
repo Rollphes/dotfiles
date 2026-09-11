@@ -25,9 +25,17 @@ function Assert-Contained([string] $Name, [string] $Path) {
 if ($env:USERPROFILE -notmatch '^[A-Za-z]:[\\/]' -or (Native-Path $env:USERPROFILE) -ine $developmentHome) {
     throw 'HOME and native USERPROFILE must identify the same development home'
 }
-foreach ($pair in @(@('APPDATA', 'AppData\Roaming'), @('LOCALAPPDATA', 'AppData\Local'))) {
+foreach ($pair in @(
+    @('APPDATA', '.config'),
+    @('LOCALAPPDATA', '.local\share'),
+    @('GOCACHE', '.cache\go-build'),
+    @('NPM_CONFIG_CACHE', '.cache\npm')
+)) {
     $value = [Environment]::GetEnvironmentVariable($pair[0])
     if ((Native-Path $value) -ine (Join-Path $developmentHome $pair[1])) { throw "Unexpected $($pair[0]): $value" }
+}
+if ([IO.Directory]::Exists((Join-Path $developmentHome 'AppData'))) {
+    throw 'The canonical development home contains the retired AppData tree'
 }
 foreach ($name in 'XDG_CONFIG_HOME','XDG_DATA_HOME','XDG_STATE_HOME','XDG_CACHE_HOME',
     'MISE_CONFIG_DIR','MISE_DATA_DIR','MISE_STATE_DIR','MISE_CACHE_DIR','MISE_TMP_DIR',
@@ -54,10 +62,22 @@ if ($ciToolset) {
     Write-Output 'go/gopls=SKIP (excluded from CI toolset)'
 } else {
     $go = (Invoke-Probe go @('env','-json','GOPATH','GOCACHE','GOENV','GOMODCACHE','GOTMPDIR','GOROOT')) -join "`n" | ConvertFrom-Json
-    foreach ($name in 'GOPATH','GOCACHE','GOENV','GOMODCACHE','GOROOT') { Assert-Contained "go.$name" $go.$name }
+    $expectedGo = @{
+        GOPATH = Join-Path $developmentHome 'go'
+        GOCACHE = Join-Path $developmentHome '.cache\go-build'
+        GOENV = Join-Path $developmentHome '.config\go\env'
+        GOMODCACHE = Join-Path $developmentHome 'go\pkg\mod'
+    }
+    foreach ($name in $expectedGo.Keys) {
+        if ((Native-Path $go.$name) -ine $expectedGo[$name]) { throw "Unexpected go.$($name): $($go.$name)" }
+        Write-Output "go.$name=$($go.$name)"
+    }
+    Assert-Contained 'go.GOROOT' $go.GOROOT
     if ($go.GOTMPDIR -and (Native-Path $go.GOTMPDIR) -ine 'C:\msys64\tmp') { throw 'Go GOTMPDIR escaped' }
 }
-Assert-Contained 'npm.cache' ((Invoke-Probe npm @('config','get','cache')) -join '').Trim()
+$npmCache = ((Invoke-Probe npm @('config','get','cache')) -join '').Trim()
+if ((Native-Path $npmCache) -ine (Native-Path $env:NPM_CONFIG_CACHE)) { throw "Unexpected npm cache: $npmCache" }
+Write-Output "npm.cache=$npmCache"
 $pnpmStore = ((Invoke-Probe pnpm @('store','path')) -join '').Trim()
 # pnpm may use a project-local store; the current workspace is an allowed target.
 $workspace = (Get-Location).Path.TrimEnd('\')
@@ -111,8 +131,8 @@ try {
     Invoke-Probe tree-sitter @('generate','grammar.js')
     Invoke-Probe tree-sitter @('parse','--grammar-path','.', '--config-path','parser-config.json','example.txt')
     $parserLibrary = Join-Path $env:LOCALAPPDATA 'tree-sitter\lib\containment_probe.dll'
-    if (-not (Test-Path -LiteralPath $parserLibrary -PathType Leaf)) { throw 'Tree-sitter parser cache is missing from canonical Local AppData' }
-    Assert-Contained 'tree-sitter.parserCache' $parserLibrary
+    if (-not (Test-Path -LiteralPath $parserLibrary -PathType Leaf)) { throw 'Tree-sitter parser data is missing from canonical XDG data' }
+    Assert-Contained 'tree-sitter.parserData' $parserLibrary
 } finally {
     Pop-Location
     $env:GOPROXY = $savedGoProxy
