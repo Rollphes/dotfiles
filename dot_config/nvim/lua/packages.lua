@@ -15,4 +15,5 @@ vim.pack.add({
     { src = "https://github.com/windwp/nvim-autopairs" },
     { src = "https://github.com/Wansmer/treesj" },
     { src = "https://github.com/petertriho/nvim-scrollbar" },
+    { src = "https://github.com/rachartier/tiny-inline-diagnostic.nvim" },
 })
