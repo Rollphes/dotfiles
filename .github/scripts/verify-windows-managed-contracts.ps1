@@ -146,8 +146,18 @@ if (-not $ghqInstall.StartsWith(
     throw "mise install escaped the MSYS2 home: $ghqInstall"
 }
 
-function Assert-SymbolicLinkTarget([string] $LinkPath, [string] $ExpectedTarget) {
-    $link = Get-Item -LiteralPath $linkPath -Force
+function Assert-SymbolicLinkTarget(
+    [string] $LinkPath,
+    [string] $ExpectedTarget,
+    [bool] $AllowMissingTarget
+) {
+    $link = Get-Item -LiteralPath $linkPath -Force -ErrorAction SilentlyContinue
+    if ($null -eq $link) {
+        if (-not $AllowMissingTarget -and -not (Test-Path -LiteralPath $ExpectedTarget)) {
+            return
+        }
+        throw "Bridge is missing: $LinkPath"
+    }
     if ($link.LinkType -ne 'SymbolicLink') {
         throw "Bridge is not a symbolic link: $LinkPath"
     }
@@ -177,7 +187,8 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 foreach ($bridge in @($msys2BridgesToWindows)) {
     Assert-SymbolicLinkTarget `
         (Join-Path $env:DOTFILES_CI_HOST_PROFILE $bridge.path) `
-        (Join-Path $env:HOME $bridge.path)
+        (Join-Path $env:HOME $bridge.path) `
+        $bridge.allowMissingTarget
 }
 
 $windowsBridgesToMsys2 = (chezmoi --source $env:GITHUB_WORKSPACE execute-template '{{ .windows.bridgesTo.msys2 | toJson }}') | ConvertFrom-Json
@@ -185,7 +196,8 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 foreach ($bridge in @($windowsBridgesToMsys2)) {
     Assert-SymbolicLinkTarget `
         (Join-Path $env:HOME $bridge.path) `
-        (Join-Path $env:DOTFILES_CI_HOST_PROFILE $bridge.path)
+        (Join-Path $env:DOTFILES_CI_HOST_PROFILE $bridge.path) `
+        $bridge.allowMissingTarget
 }
 
 $secondAuditState = "$env:HOME\.local\state\dotfiles-leakage-ci\second"
