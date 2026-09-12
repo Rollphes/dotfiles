@@ -63,5 +63,5 @@ vim.opt.timeoutlen = 1000
 
 vim.opt.laststatus = 2
 vim.opt.showmode = true
-vim.opt.cmdheight = 1
+vim.opt.cmdheight = 0
 vim.opt.ruler = true
