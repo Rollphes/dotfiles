@@ -11,6 +11,7 @@ set -gx TMP "$TEMP"
 set -gx GHQ_ROOT "$HOME/ghq"
 set -gx GOCACHE (/usr/bin/cygpath.exe -w "$XDG_CACHE_HOME/go-build")
 set -gx NPM_CONFIG_CACHE (/usr/bin/cygpath.exe -w "$XDG_CACHE_HOME/npm")
+set -gx PNPM_CONFIG_STORE_DIR (/usr/bin/cygpath.exe -w "$XDG_DATA_HOME/pnpm/store")
 
 set -gx MISE_CONFIG_DIR "$XDG_CONFIG_HOME/mise"
 set -gx MISE_DATA_DIR "$XDG_DATA_HOME/mise"

@@ -37,7 +37,8 @@ foreach ($pair in @(
     @('APPDATA', '.config'),
     @('LOCALAPPDATA', '.local\share'),
     @('GOCACHE', '.cache\go-build'),
-    @('NPM_CONFIG_CACHE', '.cache\npm')
+    @('NPM_CONFIG_CACHE', '.cache\npm'),
+    @('PNPM_CONFIG_STORE_DIR', '.local\share\pnpm\store')
 )) {
     $value = [Environment]::GetEnvironmentVariable($pair[0])
     if ((Native-Path $value) -ine (Join-Path $developmentHome $pair[1])) { throw "Unexpected $($pair[0]): $value" }
@@ -84,12 +85,20 @@ if ($ciToolset) {
 $npmCache = ((Invoke-Probe npm @('config','get','cache')) -join '').Trim()
 if ((Native-Path $npmCache) -ine (Native-Path $env:NPM_CONFIG_CACHE)) { throw "Unexpected npm cache: $npmCache" }
 Write-Output "npm.cache=$npmCache"
+$pnpmStoreConfig = ((Invoke-Probe pnpm @('config','get','store-dir')) -join '').Trim()
+if ((Native-Path $pnpmStoreConfig) -ine (Native-Path $env:PNPM_CONFIG_STORE_DIR)) {
+    throw "Unexpected pnpm store-dir: $pnpmStoreConfig"
+}
 $pnpmStore = ((Invoke-Probe pnpm @('store','path')) -join '').Trim()
-# pnpm may use a project-local store; the current workspace is an allowed target.
-$workspace = (Get-Location).Path.TrimEnd('\')
-if ((Native-Path $pnpmStore).StartsWith("$workspace\", [StringComparison]::OrdinalIgnoreCase)) {
-    Write-Output "pnpm.workspaceStore=$pnpmStore"
-} else { Assert-Contained 'pnpm.store' $pnpmStore }
+$pnpmStoreRoot = Native-Path $env:PNPM_CONFIG_STORE_DIR
+$pnpmStorePath = Native-Path $pnpmStore
+if (
+    $pnpmStorePath -ine $pnpmStoreRoot -and
+    -not $pnpmStorePath.StartsWith("$pnpmStoreRoot\", [StringComparison]::OrdinalIgnoreCase)
+) {
+    throw "pnpm store escaped configured root: $pnpmStorePath"
+}
+Assert-Contained 'pnpm.store' $pnpmStorePath
 Assert-Contained 'uv.cache' ((Invoke-Probe uv @('cache','dir')) -join '').Trim()
 Assert-Contained 'ghq.root' ((Invoke-Probe ghq @('root')) -join '').Trim()
 $node = ((Invoke-Probe node @('-e','console.log(JSON.stringify({home:require("os").homedir(),tmp:require("os").tmpdir()}))')) -join '') | ConvertFrom-Json

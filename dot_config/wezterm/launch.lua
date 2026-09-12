@@ -34,6 +34,7 @@ local function windows_native_tool_environment()
     GHQ_ROOT = paths.home .. '\\ghq',
     GOCACHE = paths.cache .. '\\go-build',
     NPM_CONFIG_CACHE = paths.cache .. '\\npm',
+    PNPM_CONFIG_STORE_DIR = paths.data .. '\\pnpm\\store',
     MISE_CONFIG_DIR = paths.config .. '\\mise',
     MISE_DATA_DIR = paths.data .. '\\mise',
     MISE_STATE_DIR = paths.state .. '\\mise',

@@ -66,6 +66,7 @@ a topology conflict for manual resolution.
 | mise | Config, data, state, cache and temp directories are explicit canonical paths. |
 | Go | Uses `go`, `go\pkg\mod` and `.config\go\env`; `GOCACHE` uses `.cache\go-build`. |
 | npm | Cache uses `.cache\npm`. |
+| pnpm | Store uses `.local\share\pnpm\store`; pnpm appends its versioned store directory. |
 | tree-sitter | Parser data follows `LOCALAPPDATA` into `.local\share\tree-sitter`. |
 | Starship | Config uses `.config\starship.toml`; cache uses `.cache\starship`. |
 | Atuin | Not installed or activated on Windows because its Known Folder lookup bypasses the process-local profile contract. |

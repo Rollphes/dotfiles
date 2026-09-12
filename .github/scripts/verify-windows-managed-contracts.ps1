@@ -53,7 +53,8 @@ $fishEnvironment = @(
 printf '%s\n' \
     "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" \
     "$APPDATA" "$LOCALAPPDATA" "$TEMP" "$TMP" "$GHQ_ROOT" "$GOCACHE" \
-    "$NPM_CONFIG_CACHE" "$MISE_CONFIG_DIR" "$MISE_DATA_DIR" \
+    "$NPM_CONFIG_CACHE" "$PNPM_CONFIG_STORE_DIR" \
+    "$MISE_CONFIG_DIR" "$MISE_DATA_DIR" \
     "$MISE_STATE_DIR" "$MISE_CACHE_DIR" "$MISE_TMP_DIR" \
     "$AUBE_CACHE_DIR" "$AUBE_STORE_DIR" "$UV_CACHE_DIR" "$UV_TOOL_DIR" \
     "$UV_PYTHON_INSTALL_DIR" "$_ZO_DATA_DIR" "$STARSHIP_CONFIG" \
@@ -64,7 +65,7 @@ command -s cygpath
 $emptyEnvironment = @(
     $fishEnvironment | Where-Object { [string]::IsNullOrWhiteSpace($_) }
 )
-if ($fishEnvironment.Count -ne 27 -or $emptyEnvironment.Count -ne 0) {
+if ($fishEnvironment.Count -ne 28 -or $emptyEnvironment.Count -ne 0) {
     throw "Unexpected Fish environment output: $($fishEnvironment.Count) values"
 }
 $expectedEnvironment = @(
@@ -79,6 +80,7 @@ $expectedEnvironment = @(
     "$env:HOME\ghq",
     "$env:HOME\.cache\go-build",
     "$env:HOME\.cache\npm",
+    "$env:HOME\.local\share\pnpm\store",
     "$env:HOME\.config\mise",
     "$env:HOME\.local\share\mise",
     "$env:HOME\.local\state\mise",
