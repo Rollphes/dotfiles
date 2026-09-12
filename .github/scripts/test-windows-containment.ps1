@@ -44,6 +44,9 @@ Run-Case 'host-locallow' { $dir=Join-Path $hostRoot 'AppData\LocalLow\unknown-to
 $startupCache = Join-Path $hostRoot 'AppData\Local\Microsoft\PowerShell\StartupProfileData-NonInteractive'
 Run-Case 'managed-host-powershell-startup-cache' { New-Item -ItemType Directory (Split-Path $startupCache) -Force | Out-Null; Set-Content $startupCache 'x' } $false
 Run-Case 'host-powershell-cache-sibling' { Set-Content (Join-Path (Split-Path $startupCache) 'unknown.state') 'x' } $true
+$windowsStartupCache = Join-Path $hostRoot 'AppData\Local\Microsoft\Windows\PowerShell\StartupProfileData-NonInteractive'
+Run-Case 'windows-powershell-startup-cache' { New-Item -ItemType Directory (Split-Path $windowsStartupCache) -Force | Out-Null; Set-Content $windowsStartupCache 'x' } $false
+Run-Case 'windows-powershell-cache-sibling' { Set-Content (Join-Path (Split-Path $windowsStartupCache) 'unknown.state') 'x' } $true
 $usrClassLog = Join-Path $hostRoot 'AppData\Local\Microsoft\Windows\UsrClass.dat.LOG1'
 Run-Case 'host-registry-log' { New-Item -ItemType Directory (Split-Path $usrClassLog) -Force | Out-Null; Set-Content $usrClassLog 'x' } $false
 Run-Case 'host-registry-log-sibling' { Set-Content (Join-Path (Split-Path $usrClassLog) 'unknown.LOG1') 'x' } $true

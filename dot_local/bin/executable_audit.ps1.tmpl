@@ -502,7 +502,8 @@ switch ($Command) {
                     (Join-Path $hostTempPath 'WinSAT'),
                     # Observed host registry log and PowerShell startup cache.
                     (Join-Path $hostLocalPath 'Microsoft\Windows\UsrClass.dat.LOG1'),
-                    (Join-Path $hostLocalPath 'Microsoft\PowerShell\StartupProfileData-NonInteractive')
+                    (Join-Path $hostLocalPath 'Microsoft\PowerShell\StartupProfileData-NonInteractive'),
+                    (Join-Path $hostLocalPath 'Microsoft\Windows\PowerShell\StartupProfileData-NonInteractive')
                 )
                 runnerStateExclusions = @(Get-RunnerStateExclusions $hostProfilePath $hostLocalPath)
                 policy = 'New, modified, metadataOnly host or canonical AppData entries fail except manifest-managed fonts and their containers; deleted entries are informational.'
