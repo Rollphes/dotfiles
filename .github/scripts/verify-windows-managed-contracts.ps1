@@ -165,21 +165,21 @@ function Assert-SymbolicLinkTarget([string] $LinkPath, [string] $ExpectedTarget)
     }
 }
 
+function Resolve-BridgeRoot([string] $Name) {
+    switch ($Name) {
+        'msys2UserProfile' { return $env:HOME }
+        'windowsUserProfile' { return $env:DOTFILES_CI_HOST_PROFILE }
+        'windowsLocalAppData' { return $env:DOTFILES_CI_HOST_LOCALAPPDATA }
+        default { throw "Unknown bridge root: $Name" }
+    }
+}
+
 $bridges = (chezmoi --source $env:GITHUB_WORKSPACE execute-template '{{ .windows.bridges | toJson }}') | ConvertFrom-Json
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 foreach ($bridge in @($bridges)) {
-    $relativePath = $bridge.path
     Assert-SymbolicLinkTarget `
-        (Join-Path $env:DOTFILES_CI_HOST_PROFILE $relativePath) `
-        (Join-Path $env:HOME $relativePath)
-}
-
-$reverseBridges = (chezmoi --source $env:GITHUB_WORKSPACE execute-template '{{ .windows.reverseBridges | toJson }}') | ConvertFrom-Json
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-foreach ($bridge in @($reverseBridges)) {
-    Assert-SymbolicLinkTarget `
-        (Join-Path $env:HOME $bridge.linkPath) `
-        (Join-Path $env:DOTFILES_CI_HOST_LOCALAPPDATA $bridge.targetPath)
+        (Join-Path (Resolve-BridgeRoot $bridge.symlinkRoot) $bridge.symlink) `
+        (Join-Path (Resolve-BridgeRoot $bridge.targetRoot) $bridge.target)
 }
 
 $secondAuditState = "$env:HOME\.local\state\dotfiles-leakage-ci\second"

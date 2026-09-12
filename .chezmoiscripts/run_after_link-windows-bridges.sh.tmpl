@@ -122,7 +122,7 @@ resolve_link_target() (
 )
 
 # Keep filesystem operations in the MSYS2 POSIX namespace.
-msys_home=$(cygpath -u "{{ .chezmoi.destDir }}")
+msys2_user_profile=$(cygpath -u "{{ .chezmoi.destDir }}")
 
 [ -x "$windows_powershell" ] || fail "Windows PowerShell not found: $windows_powershell"
 
@@ -130,7 +130,7 @@ host_profile_hint="${HOMEDRIVE:-}${HOMEPATH:-}"
 [ -n "$host_profile_hint" ] || fail "HOMEDRIVE/HOMEPATH unavailable"
 host_profile_hint=$(cygpath -w "$(cygpath -u "$host_profile_hint")")
 host_profile_hint_posix=$(cygpath -u "$host_profile_hint")
-[ "$host_profile_hint_posix" != "$msys_home" ] || fail "Host and development profiles must differ"
+[ "$host_profile_hint_posix" != "$msys2_user_profile" ] || fail "Host and development profiles must differ"
 host_app_data_hint=$(cygpath -w "$host_profile_hint_posix/AppData/Roaming")
 host_local_app_data_hint=$(cygpath -w "$host_profile_hint_posix/AppData/Local")
 
@@ -141,8 +141,8 @@ host_profile=$(windows_run_host_powershell \
     -NoProfile -NonInteractive -Command '
 {{ includeTemplate "lib/windows-host-profile.ps1.tmpl" . }}
 ') || fail "Cannot resolve the registered Windows host profile"
-win_home=$(cygpath -u "$(printf '%s' "$host_profile" | tr -d '\r')")
-[ "$win_home" != "$msys_home" ] || fail "Host and development profiles must differ"
+windows_user_profile=$(cygpath -u "$(printf '%s' "$host_profile" | tr -d '\r')")
+[ "$windows_user_profile" != "$msys2_user_profile" ] || fail "Host and development profiles must differ"
 
 windows_local_app_data=$(windows_run_host_powershell \
     "$host_profile_hint" \
@@ -152,10 +152,19 @@ windows_local_app_data=$(windows_run_host_powershell \
     '(Get-ItemProperty -LiteralPath "Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders" -Name "Local AppData" -ErrorAction Stop)."Local AppData"' \
     | tr -d '\r') || fail "Cannot resolve the registered Windows Local AppData"
 [ -n "$windows_local_app_data" ] || fail "Registered Windows Local AppData is empty"
-win_local_app_data=$(cygpath -u "$windows_local_app_data")
-case "$win_local_app_data/" in
-    "$msys_home"/*) fail "Windows Local AppData must remain outside the development home" ;;
+windows_local_app_data=$(cygpath -u "$windows_local_app_data")
+case "$windows_local_app_data/" in
+    "$msys2_user_profile"/*) fail "Windows Local AppData must remain outside the development home" ;;
 esac
+
+resolve_bridge_root() {
+    case "$1" in
+        windowsUserProfile) printf '%s\n' "$windows_user_profile" ;;
+        msys2UserProfile) printf '%s\n' "$msys2_user_profile" ;;
+        windowsLocalAppData) printf '%s\n' "$windows_local_app_data" ;;
+        *) fail "unknown bridge root '$1'" ;;
+    esac
+}
 
 reconcile_one() {
     kind="$1"
@@ -249,24 +258,19 @@ reconcile_one() {
 }
 
 console_header "$component" "Reconciling cross-home bridges"
-console_context "topology: manifest-selected link and target endpoints"
+console_detail "topology" "Windows USERPROFILE symlink -> MSYS2 canonical USERPROFILE target"
+console_detail "topology" "MSYS2 canonical USERPROFILE symlink -> Windows LocalAppData target"
+printf '\n'
 
 {{ range .windows.bridges -}}
+symlink_root=$(resolve_bridge_root "{{ .symlinkRoot }}")
+target_root=$(resolve_bridge_root "{{ .targetRoot }}")
 reconcile_one \
     "{{ .kind }}" \
-    "{{ .path }}" \
-    "$win_home/{{ .path }}" \
-    "$msys_home/{{ .path }}" \
-    "false"
-{{ end -}}
-
-{{ range .windows.reverseBridges -}}
-reconcile_one \
-    "{{ .kind }}" \
-    "{{ .linkPath }}" \
-    "$msys_home/{{ .linkPath }}" \
-    "$win_local_app_data/{{ .targetPath }}" \
-    "true"
+    "{{ .symlink }}" \
+    "$symlink_root/{{ .symlink }}" \
+    "$target_root/{{ .target }}" \
+    "{{ if .allowMissingTarget }}true{{ else }}false{{ end }}"
 {{ end -}}
 
 console_complete \

@@ -26,19 +26,14 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $MonitoredRootIds = @('hostProfile', 'local', 'roaming', 'temp', 'canonicalAppData')
-$DefaultHostBridgePaths = @(
+$DefaultManagedBridges = @(
 {{ range .windows.bridges -}}
-    '{{ .path }}'
-{{ end -}}
-)
-$DefaultReverseBridgeLinks = @(
-{{ range .windows.reverseBridges -}}
-    '{{ .linkPath }}'
-{{ end -}}
-)
-$DefaultReverseBridgeTargets = @(
-{{ range .windows.reverseBridges -}}
-    '{{ .targetPath }}'
+    [pscustomobject]@{
+        symlinkRoot = '{{ .symlinkRoot }}'
+        symlink = '{{ .symlink }}'
+        targetRoot = '{{ .targetRoot }}'
+        target = '{{ .target }}'
+    }
 {{ end -}}
 )
 $ManagedFontPatterns = @(
@@ -92,6 +87,21 @@ function Resolve-StateRoot {
         return Resolve-FullPath (Join-Path $env:XDG_STATE_HOME 'dotfiles-leakage-audit')
     }
     return Resolve-FullPath (Join-Path $HomePath '.local\state\dotfiles-leakage-audit')
+}
+
+function Resolve-BridgeRoot {
+    param(
+        [Parameter(Mandatory)][string] $Name,
+        [Parameter(Mandatory)][string] $CanonicalHomePath,
+        [Parameter(Mandatory)][string] $HostProfilePath,
+        [Parameter(Mandatory)][string] $HostLocalAppDataPath
+    )
+    switch ($Name) {
+        'msys2UserProfile' { return $CanonicalHomePath }
+        'windowsUserProfile' { return $HostProfilePath }
+        'windowsLocalAppData' { return $HostLocalAppDataPath }
+        default { throw "Unknown bridge root: $Name" }
+    }
 }
 
 function Get-OSStateExclusions([string] $ProfilePath) {
@@ -532,14 +542,19 @@ switch ($Command) {
                     XDG_STATE_HOME = $env:XDG_STATE_HOME; XDG_CACHE_HOME = $env:XDG_CACHE_HOME
                 }
                 managedBridgeRoots = @(
-                    @($DefaultHostBridgePaths | ForEach-Object {
-                        Resolve-FullPath (Join-Path $hostProfilePath ($_ -replace '/', '\'))
-                    })
-                    @($DefaultReverseBridgeLinks | ForEach-Object {
-                        Resolve-FullPath (Join-Path $canonicalHomePath ($_ -replace '/', '\'))
-                    })
-                    @($DefaultReverseBridgeTargets | ForEach-Object {
-                        Resolve-FullPath (Join-Path $hostLocalPath ($_ -replace '/', '\'))
+                    @($DefaultManagedBridges | ForEach-Object {
+                        $symlinkRoot = Resolve-BridgeRoot `
+                            $_.symlinkRoot `
+                            $canonicalHomePath `
+                            $hostProfilePath `
+                            $hostLocalPath
+                        $targetRoot = Resolve-BridgeRoot `
+                            $_.targetRoot `
+                            $canonicalHomePath `
+                            $hostProfilePath `
+                            $hostLocalPath
+                        Resolve-FullPath (Join-Path $symlinkRoot ($_.symlink -replace '/', '\'))
+                        Resolve-FullPath (Join-Path $targetRoot ($_.target -replace '/', '\'))
                     })
                 )
             }

@@ -1,37 +1,73 @@
+# topology: Windows USERPROFILE symlink -> MSYS2 canonical USERPROFILE target
 [[windows.bridges]]
-path = ".config/wezterm"
+symlinkRoot = "windowsUserProfile"
+symlink = ".config/wezterm"
+targetRoot = "msys2UserProfile"
+target = ".config/wezterm"
 kind = "dir"
+allowMissingTarget = false
 
 [[windows.bridges]]
-path = ".agents"
+symlinkRoot = "windowsUserProfile"
+symlink = ".agents"
+targetRoot = "msys2UserProfile"
+target = ".agents"
 kind = "dir"
+allowMissingTarget = false
 
 [[windows.bridges]]
-path = ".claude"
+symlinkRoot = "windowsUserProfile"
+symlink = ".claude"
+targetRoot = "msys2UserProfile"
+target = ".claude"
 kind = "dir"
+allowMissingTarget = false
 
 [[windows.bridges]]
-path = ".codex"
+symlinkRoot = "windowsUserProfile"
+symlink = ".codex"
+targetRoot = "msys2UserProfile"
+target = ".codex"
 kind = "dir"
+allowMissingTarget = false
 
 [[windows.bridges]]
-path = ".claude.json"
+symlinkRoot = "windowsUserProfile"
+symlink = ".claude.json"
+targetRoot = "msys2UserProfile"
+target = ".claude.json"
 kind = "file"
+allowMissingTarget = false
 
 [[windows.bridges]]
-path = ".gitconfig"
+symlinkRoot = "windowsUserProfile"
+symlink = ".gitconfig"
+targetRoot = "msys2UserProfile"
+target = ".gitconfig"
 kind = "file"
+allowMissingTarget = false
 
 [[windows.bridges]]
-path = ".npmrc"
+symlinkRoot = "windowsUserProfile"
+symlink = ".npmrc"
+targetRoot = "msys2UserProfile"
+target = ".npmrc"
 kind = "file"
+allowMissingTarget = false
 
-[[windows.reverseBridges]]
-linkPath = "AppData/Local/Microsoft/PowerShell/StartupProfileData-NonInteractive"
-targetPath = "Microsoft/PowerShell/StartupProfileData-NonInteractive"
+# topology: MSYS2 canonical USERPROFILE symlink -> Windows LocalAppData target
+[[windows.bridges]]
+symlinkRoot = "msys2UserProfile"
+symlink = "AppData/Local/Microsoft/PowerShell/StartupProfileData-NonInteractive"
+targetRoot = "windowsLocalAppData"
+target = "Microsoft/PowerShell/StartupProfileData-NonInteractive"
 kind = "file"
+allowMissingTarget = true
 
-[[windows.reverseBridges]]
-linkPath = "AppData/Local/Microsoft/PowerShell/telemetry.uuid"
-targetPath = "Microsoft/PowerShell/telemetry.uuid"
+[[windows.bridges]]
+symlinkRoot = "msys2UserProfile"
+symlink = "AppData/Local/Microsoft/PowerShell/telemetry.uuid"
+targetRoot = "windowsLocalAppData"
+target = "Microsoft/PowerShell/telemetry.uuid"
 kind = "file"
+allowMissingTarget = true

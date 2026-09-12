@@ -187,10 +187,10 @@ The applied shell contract is:
 - `TEMP` and `TMP` map to `C:\msys64\tmp`.
 - The Windows login profile and Known Folders remain unchanged.
 
-Managed bridges and user fonts remain host-owned. Two reverse links route
-PowerShell's unavoidable Windows startup files from the canonical `AppData`
-path to real host storage. For the containment boundary, tool-specific behavior,
-audit policy, exclusions, report format and CI coverage, see
+Managed bridges and user fonts remain host-owned. Two canonical-profile
+symlinks route PowerShell's unavoidable Windows startup files from the canonical
+`AppData` path to real host storage. For the containment boundary, tool-specific
+behavior, audit policy, exclusions, report format and CI coverage, see
 [Windows Runtime Containment].
 
 [Windows Runtime Containment]: ../reference/windows-runtime-containment.md

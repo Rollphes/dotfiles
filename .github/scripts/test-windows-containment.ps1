@@ -70,13 +70,13 @@ try {
 Run-Case 'canonical-write' { Set-Content (Join-Path $canonical 'allowed-state') 'x' } $false
 Run-Case 'canonical-appdata-container' { New-Item -ItemType Directory (Join-Path $canonical 'AppData') | Out-Null } $false
 Run-Case 'canonical-appdata-unknown' { Set-Content (Join-Path $canonical 'AppData\unknown.state') 'x' } $true
-$reverseCacheLink = Join-Path $canonical 'AppData\Local\Microsoft\PowerShell\StartupProfileData-NonInteractive'
-Run-Case 'reverse-cache-link-endpoint' { New-Item -ItemType Directory (Split-Path $reverseCacheLink) -Force | Out-Null; Set-Content $reverseCacheLink 'x' } $false
-$reverseTelemetryLink = Join-Path $canonical 'AppData\Local\Microsoft\PowerShell\telemetry.uuid'
-Run-Case 'reverse-telemetry-link-endpoint' { Set-Content $reverseTelemetryLink 'x' } $false
-Run-Case 'reverse-link-sibling' { Set-Content (Join-Path (Split-Path $reverseCacheLink) 'unknown.state') 'x' } $true
+$canonicalCacheSymlink = Join-Path $canonical 'AppData\Local\Microsoft\PowerShell\StartupProfileData-NonInteractive'
+Run-Case 'canonical-cache-symlink-endpoint' { New-Item -ItemType Directory (Split-Path $canonicalCacheSymlink) -Force | Out-Null; Set-Content $canonicalCacheSymlink 'x' } $false
+$canonicalTelemetrySymlink = Join-Path $canonical 'AppData\Local\Microsoft\PowerShell\telemetry.uuid'
+Run-Case 'canonical-telemetry-symlink-endpoint' { Set-Content $canonicalTelemetrySymlink 'x' } $false
+Run-Case 'canonical-symlink-sibling' { Set-Content (Join-Path (Split-Path $canonicalCacheSymlink) 'unknown.state') 'x' } $true
 $hostTelemetryTarget = Join-Path $hostRoot 'AppData\Local\Microsoft\PowerShell\telemetry.uuid'
-Run-Case 'reverse-telemetry-target-endpoint' { Set-Content $hostTelemetryTarget 'x' } $false
+Run-Case 'host-telemetry-target-endpoint' { Set-Content $hostTelemetryTarget 'x' } $false
 Run-Case 'explicit-workspace' { New-Item -ItemType Directory $fixtureWorkspace -Force | Out-Null; Set-Content (Join-Path $fixtureWorkspace 'source') 'x' } $false
 Run-Case 'workspace-sibling' { New-Item -ItemType Directory (Join-Path $hostRoot 'project-other') | Out-Null } $true
 $fontDir = Join-Path $hostRoot 'AppData\Local\Microsoft\Windows\Fonts'

@@ -36,15 +36,16 @@ meaning does not change when a development shell virtualizes `USERPROFILE`.
 Font and bridge scripts launch host-scoped PowerShell children when they must
 operate on host resources. Those children receive the registered host profile
 and AppData paths. Their temp directory remains `C:\msys64\tmp`. The bridge
-reconciler creates canonical `AppData` containers only for the two reverse link
-endpoints described below.
+reconciler creates canonical `AppData` containers only for the two PowerShell
+symlink endpoints described below.
 
 Managed user fonts remain in the registered host Local AppData directory.
 Existing runtime data is neither migrated nor deleted.
 
 PowerShell on Windows derives its startup directory from the Windows
 `LocalApplicationData` Known Folder even when process `LOCALAPPDATA` points to
-XDG data. Two reverse bridges contain those writes without changing Windows:
+XDG data. Two canonical-profile symlinks contain those writes without changing
+Windows:
 
 ```text
 C:\msys64\home\<username>\AppData\Local\Microsoft\PowerShell\StartupProfileData-NonInteractive
@@ -54,9 +55,9 @@ C:\msys64\home\<username>\AppData\Local\Microsoft\PowerShell\telemetry.uuid
   -> <host Local AppData>\Microsoft\PowerShell\telemetry.uuid
 ```
 
-Only these file endpoints are reversed. The bridge reconciler does not replace
-an existing canonical file or directory; it reports a topology conflict for
-manual resolution.
+Only these canonical file endpoints point into host Local AppData. The bridge
+reconciler does not replace an existing canonical file or directory; it reports
+a topology conflict for manual resolution.
 
 ## Tool Behavior
 
@@ -123,7 +124,7 @@ Exclusions have narrow, documented purposes:
 
 | Category | Paths |
 | --- | --- |
-| Managed bridges | Exact link and target endpoints, including the two reverse PowerShell links, plus their container metadata |
+| Managed bridges | Exact symlink and target endpoints, including the two canonical-profile PowerShell symlinks, plus their container metadata |
 | Audit state | The active audit's own files |
 | Workspace | Explicit `-WorkspaceRoots` entries |
 | Windows registry state | Observed `NTUSER.DAT` hive files and `Microsoft\Windows\UsrClass.dat.LOG1` |
@@ -137,7 +138,7 @@ Microsoft\Windows\PowerShell\StartupProfileData-NonInteractive
 ```
 
 PowerShell 7 startup data under `Microsoft\PowerShell` is classified through
-the reverse bridge endpoints instead of the OS-state exclusion.
+the managed bridge endpoints instead of the OS-state exclusion.
 
 Runner exclusions apply only when both `GITHUB_ACTIONS=true` and
 `RUNNER_ENVIRONMENT=github-hosted`. Adjacent paths remain monitored.
