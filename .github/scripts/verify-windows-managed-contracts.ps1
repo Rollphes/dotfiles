@@ -44,29 +44,34 @@ if (
 $fishConfigHome = (
     & 'C:\msys64\usr\bin\cygpath.exe' -u $env:XDG_CONFIG_HOME
 ).Trim()
+$fishEnvironmentNames = @(
+    'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME', 'XDG_CACHE_HOME',
+    'APPDATA', 'LOCALAPPDATA', 'TEMP', 'TMP', 'GHQ_ROOT', 'GOCACHE',
+    'NPM_CONFIG_CACHE', 'PNPM_CONFIG_STORE_DIR',
+    'MISE_CONFIG_DIR', 'MISE_DATA_DIR',
+    'MISE_STATE_DIR', 'MISE_CACHE_DIR', 'MISE_TMP_DIR',
+    'AUBE_CACHE_DIR', 'AUBE_STORE_DIR', 'UV_CACHE_DIR', 'UV_TOOL_DIR',
+    'UV_PYTHON_INSTALL_DIR', '_ZO_DATA_DIR', 'STARSHIP_CONFIG',
+    'STARSHIP_CACHE', 'HOME', 'USERPROFILE'
+)
 $fishEnvironment = @(
     & 'C:\msys64\usr\bin\env.exe' `
         'PATH=' `
         "XDG_CONFIG_HOME=$fishConfigHome" `
         'C:\msys64\usr\bin\fish.exe' `
-        -c @'
-printf '%s\n' \
-    "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" \
-    "$APPDATA" "$LOCALAPPDATA" "$TEMP" "$TMP" "$GHQ_ROOT" "$GOCACHE" \
-    "$NPM_CONFIG_CACHE" "$PNPM_CONFIG_STORE_DIR" \
-    "$MISE_CONFIG_DIR" "$MISE_DATA_DIR" \
-    "$MISE_STATE_DIR" "$MISE_CACHE_DIR" "$MISE_TMP_DIR" \
-    "$AUBE_CACHE_DIR" "$AUBE_STORE_DIR" "$UV_CACHE_DIR" "$UV_TOOL_DIR" \
-    "$UV_PYTHON_INSTALL_DIR" "$_ZO_DATA_DIR" "$STARSHIP_CONFIG" \
-    "$STARSHIP_CACHE" "$HOME" "$USERPROFILE"
-command -s cygpath
-'@
+        -c 'for name in $argv; set -q $name; or exit 2; printf ''%s\n'' $$name; end; command -s cygpath' `
+        $fishEnvironmentNames
 )
+$fishProbeExitCode = $LASTEXITCODE
 $emptyEnvironment = @(
     $fishEnvironment | Where-Object { [string]::IsNullOrWhiteSpace($_) }
 )
-if ($fishEnvironment.Count -ne 28 -or $emptyEnvironment.Count -ne 0) {
-    throw "Unexpected Fish environment output: $($fishEnvironment.Count) values"
+if (
+    $fishProbeExitCode -ne 0 -or
+    $fishEnvironment.Count -ne ($fishEnvironmentNames.Count + 1) -or
+    $emptyEnvironment.Count -ne 0
+) {
+    throw "Unexpected Fish environment output: $($fishEnvironment.Count) values, exit $fishProbeExitCode"
 }
 $expectedEnvironment = @(
     "$env:HOME\.config",
