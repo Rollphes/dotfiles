@@ -236,17 +236,22 @@ reconcile_one() {
 }
 
 console_header "$component" "Reconciling cross-home bridges"
-console_detail "topology" "Windows-native USERPROFILE symlink -> MSYS2 canonical USERPROFILE target"
-console_detail "topology" "MSYS2 canonical USERPROFILE symlink -> Windows-native USERPROFILE target"
+console_detail "topology" "msys2.bridgesTo.windows (MSYS2 target, Windows symlink)"
+console_detail "topology" "windows.bridgesTo.msys2 (Windows target, MSYS2 symlink)"
 printf '\n'
 
-{{ range $topology, $_ := .windows.bridges -}}
-{{ if and (ne $topology "windowsToMsys2") (ne $topology "msys2ToWindows") -}}
-fail "unknown bridge topology '{{ $topology }}'"
+{{ range $location, $_ := .msys2.bridgesTo -}}
+{{ if ne $location "windows" -}}
+fail "unknown MSYS2 bridge location '{{ $location }}'"
+{{ end -}}
+{{ end -}}
+{{ range $location, $_ := .windows.bridgesTo -}}
+{{ if ne $location "msys2" -}}
+fail "unknown Windows bridge location '{{ $location }}'"
 {{ end -}}
 {{ end -}}
 
-{{ range .windows.bridges.windowsToMsys2 -}}
+{{ range .msys2.bridgesTo.windows -}}
 reconcile_one \
     "{{ .kind }}" \
     "{{ .path }}" \
@@ -255,7 +260,7 @@ reconcile_one \
     "{{ .allowMissingTarget }}"
 {{ end -}}
 
-{{ range .windows.bridges.msys2ToWindows -}}
+{{ range .windows.bridgesTo.msys2 -}}
 reconcile_one \
     "{{ .kind }}" \
     "{{ .path }}" \

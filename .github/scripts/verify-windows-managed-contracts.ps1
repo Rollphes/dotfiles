@@ -165,17 +165,17 @@ function Assert-SymbolicLinkTarget([string] $LinkPath, [string] $ExpectedTarget)
     }
 }
 
-$windowsToMsys2Bridges = (chezmoi --source $env:GITHUB_WORKSPACE execute-template '{{ .windows.bridges.windowsToMsys2 | toJson }}') | ConvertFrom-Json
+$msys2BridgesToWindows = (chezmoi --source $env:GITHUB_WORKSPACE execute-template '{{ .msys2.bridgesTo.windows | toJson }}') | ConvertFrom-Json
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-foreach ($bridge in @($windowsToMsys2Bridges)) {
+foreach ($bridge in @($msys2BridgesToWindows)) {
     Assert-SymbolicLinkTarget `
         (Join-Path $env:DOTFILES_CI_HOST_PROFILE $bridge.path) `
         (Join-Path $env:HOME $bridge.path)
 }
 
-$msys2ToWindowsBridges = (chezmoi --source $env:GITHUB_WORKSPACE execute-template '{{ .windows.bridges.msys2ToWindows | toJson }}') | ConvertFrom-Json
+$windowsBridgesToMsys2 = (chezmoi --source $env:GITHUB_WORKSPACE execute-template '{{ .windows.bridgesTo.msys2 | toJson }}') | ConvertFrom-Json
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-foreach ($bridge in @($msys2ToWindowsBridges)) {
+foreach ($bridge in @($windowsBridgesToMsys2)) {
     Assert-SymbolicLinkTarget `
         (Join-Path $env:HOME $bridge.path) `
         (Join-Path $env:DOTFILES_CI_HOST_PROFILE $bridge.path)

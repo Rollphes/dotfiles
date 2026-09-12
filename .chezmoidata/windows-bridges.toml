@@ -1,46 +1,47 @@
-# topology: Windows-native USERPROFILE symlink -> MSYS2 canonical USERPROFILE target
-[[windows.bridges.windowsToMsys2]]
+# topology: <target location>.bridgesTo.<symlink location>
+# profiles: msys2   = MSYS2 canonical USERPROFILE
+#           windows = Windows-native USERPROFILE
+[[msys2.bridgesTo.windows]]
 path = ".config/wezterm"
 kind = "dir"
 allowMissingTarget = false
 
-[[windows.bridges.windowsToMsys2]]
+[[msys2.bridgesTo.windows]]
 path = ".agents"
 kind = "dir"
 allowMissingTarget = false
 
-[[windows.bridges.windowsToMsys2]]
+[[msys2.bridgesTo.windows]]
 path = ".claude"
 kind = "dir"
 allowMissingTarget = false
 
-[[windows.bridges.windowsToMsys2]]
+[[msys2.bridgesTo.windows]]
 path = ".codex"
 kind = "dir"
 allowMissingTarget = false
 
-[[windows.bridges.windowsToMsys2]]
+[[msys2.bridgesTo.windows]]
 path = ".claude.json"
 kind = "file"
 allowMissingTarget = false
 
-[[windows.bridges.windowsToMsys2]]
+[[msys2.bridgesTo.windows]]
 path = ".gitconfig"
 kind = "file"
 allowMissingTarget = false
 
-[[windows.bridges.windowsToMsys2]]
+[[msys2.bridgesTo.windows]]
 path = ".npmrc"
 kind = "file"
 allowMissingTarget = false
 
-# topology: MSYS2 canonical USERPROFILE symlink -> Windows-native USERPROFILE target
-[[windows.bridges.msys2ToWindows]]
+[[windows.bridgesTo.msys2]]
 path = "AppData/Local/Microsoft/PowerShell/StartupProfileData-NonInteractive"
 kind = "file"
 allowMissingTarget = true
 
-[[windows.bridges.msys2ToWindows]]
+[[windows.bridgesTo.msys2]]
 path = "AppData/Local/Microsoft/PowerShell/telemetry.uuid"
 kind = "file"
 allowMissingTarget = true

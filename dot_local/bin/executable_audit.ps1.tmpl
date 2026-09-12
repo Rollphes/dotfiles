@@ -26,13 +26,13 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $MonitoredRootIds = @('hostProfile', 'local', 'roaming', 'temp', 'canonicalAppData')
-$DefaultWindowsToMsys2BridgePaths = @(
-{{ range .windows.bridges.windowsToMsys2 -}}
+$DefaultMsys2BridgesToWindowsPaths = @(
+{{ range .msys2.bridgesTo.windows -}}
     '{{ .path }}'
 {{ end -}}
 )
-$DefaultMsys2ToWindowsBridgePaths = @(
-{{ range .windows.bridges.msys2ToWindows -}}
+$DefaultWindowsBridgesToMsys2Paths = @(
+{{ range .windows.bridgesTo.msys2 -}}
     '{{ .path }}'
 {{ end -}}
 )
@@ -527,12 +527,12 @@ switch ($Command) {
                     XDG_STATE_HOME = $env:XDG_STATE_HOME; XDG_CACHE_HOME = $env:XDG_CACHE_HOME
                 }
                 managedBridgeRoots = @(
-                    @($DefaultWindowsToMsys2BridgePaths | ForEach-Object {
+                    @($DefaultMsys2BridgesToWindowsPaths | ForEach-Object {
                         $relativePath = $_ -replace '/', '\'
                         Resolve-FullPath (Join-Path $hostProfilePath $relativePath)
                         Resolve-FullPath (Join-Path $canonicalHomePath $relativePath)
                     })
-                    @($DefaultMsys2ToWindowsBridgePaths | ForEach-Object {
+                    @($DefaultWindowsBridgesToMsys2Paths | ForEach-Object {
                         $relativePath = $_ -replace '/', '\'
                         Resolve-FullPath (Join-Path $canonicalHomePath $relativePath)
                         Resolve-FullPath (Join-Path $hostProfilePath $relativePath)
