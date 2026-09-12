@@ -97,16 +97,38 @@ function Get-OSStateExclusions([string] $ProfilePath) {
         Where-Object { [IO.Path]::GetFileName($_) -match '^ntuser\.dat(?:\.LOG[12]|\{[0-9a-f-]{36}\}\.TM(?:\.blf|Container[0-9]+\.regtrans-ms))?$' })
 }
 
-function Get-RunnerStateExclusions([string] $ProfilePath, [string] $LocalPath) {
+function Get-RunnerStateExclusions(
+    [string] $ProfilePath,
+    [string] $LocalPath,
+    [string] $CanonicalAppDataPath
+) {
     if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted') {
         return @()
     }
-    # Observed in GitHub-hosted run 34536176054. These are Windows certificate
-    # and web caches maintained by the runner OS, scoped to their exact roots.
+    # Observed in GitHub-hosted runs 34536176054 and 34671495614. These are
+    # browser and Windows caches maintained by the runner image, scoped to
+    # their exact roots.
     return @(
         (Join-Path $LocalPath 'Microsoft\Windows\WebCache'),
-        (Join-Path $ProfilePath 'AppData\LocalLow\Microsoft\CryptnetUrlCache')
+        (Join-Path $LocalPath 'Microsoft\Windows\INetCache\IE'),
+        (Join-Path $LocalPath 'Microsoft\TokenBroker\Cache'),
+        (Join-Path $LocalPath 'Mozilla\Firefox'),
+        (Join-Path $ProfilePath 'AppData\LocalLow\Microsoft\CryptnetUrlCache'),
+        (Join-Path $ProfilePath 'AppData\Roaming\Mozilla\Firefox'),
+        (Join-Path $CanonicalAppDataPath 'Local\Microsoft\Feeds Cache'),
+        (Join-Path $CanonicalAppDataPath 'Local\Microsoft\Windows\History'),
+        (Join-Path $CanonicalAppDataPath 'Local\Microsoft\Windows\INetCache'),
+        (Join-Path $CanonicalAppDataPath 'Local\Microsoft\Windows\INetCookies')
     )
+}
+
+function Get-RunnerStateEntries([string] $CanonicalAppDataPath) {
+    if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted') {
+        return @()
+    }
+    # This observed empty directory is classified entry-by-entry so an
+    # unexpected descendant remains visible to the audit.
+    return @((Join-Path $CanonicalAppDataPath 'Roaming'))
 }
 
 function Write-JsonFile {
@@ -370,6 +392,8 @@ function New-Report {
     foreach ($path in @($Metadata.osStateExclusions)) { $lines.Add("    $path") }
     $lines.Add('GITHUB-HOSTED RUNNER OS EXCLUSIONS (observed paths)')
     foreach ($path in @($Metadata.runnerStateExclusions)) { $lines.Add("    $path") }
+    $lines.Add('GITHUB-HOSTED RUNNER OS EXACT ENTRIES (classified after detection)')
+    foreach ($path in @($Metadata.runnerStateEntries)) { $lines.Add("    $path") }
     $lines.Add('EXPLICIT WORKSPACE EXCLUSIONS')
     $workspaceProperty = $Metadata.PSObject.Properties['workspaceRoots']
     if ($null -ne $workspaceProperty) {
@@ -378,6 +402,7 @@ function New-Report {
     $lines.Add("CONTENT HASHING: $($Metadata.hashFiles)")
     $policy = Write-PolicyResult $Metadata $Diffs
     $lines.Add("MANAGED HOST ASSET CHANGES: $(@($policy.managedHostAssets).Count)")
+    $lines.Add("RUNNER OS STATE CHANGES: $(@($policy.runnerOsStateChanges).Count)")
     $lines.Add('POLICY VIOLATIONS:')
     if (@($policy.violations).Count) {
         foreach ($violation in @($policy.violations)) {
@@ -395,6 +420,7 @@ function New-Report {
 function Write-PolicyResult {
     param($Metadata, $Diffs)
     $allowed = [Collections.Generic.List[object]]::new()
+    $runnerOsState = [Collections.Generic.List[object]]::new()
     $violations = @(foreach ($id in $MonitoredRootIds) {
         foreach ($status in 'new', 'modified', 'metadataOnly') {
             foreach ($entry in @($Diffs[$id].$status)) {
@@ -407,7 +433,17 @@ function Write-PolicyResult {
                 $current = if ($status -eq 'new') { $entry } else { $entry.after }
                 $fontContainer = $id -eq 'local' -and $current.type -eq 'directory' -and
                     $entry.path -in @('Microsoft', 'Microsoft/Windows', 'Microsoft/Windows/Fonts')
-                if ($managedFont -or $fontContainer) { $allowed.Add($record) } else { $record }
+                $absolutePath = Resolve-FullPath (Join-Path $Metadata.roots.$id ($entry.path -replace '/', '\'))
+                $runnerEntry = @($Metadata.runnerStateEntries | Where-Object {
+                    $absolutePath.Equals($_, [StringComparison]::OrdinalIgnoreCase)
+                }).Count -gt 0
+                if ($managedFont -or $fontContainer) {
+                    $allowed.Add($record)
+                } elseif ($runnerEntry) {
+                    $runnerOsState.Add($record)
+                } else {
+                    $record
+                }
             }
         }
     })
@@ -416,6 +452,7 @@ function Write-PolicyResult {
         decision = if ($violations.Count) { 'fail' } else { 'pass' }
         violations = $violations
         managedHostAssets = @($allowed)
+        runnerOsStateChanges = @($runnerOsState)
         deletedPolicy = 'informational: removal alone is not a state write'
     }
     Write-JsonFile $result (Join-Path $Metadata.sessionDirectory 'policy.json')
@@ -449,7 +486,7 @@ if ($Command -eq 'start') {
 } else {
     $savedSession = Resolve-SessionDirectory $auditStateRoot -RequireActive
     $savedMetadata = Read-JsonFile (Join-Path $savedSession 'metadata.json')
-    if ($savedMetadata.schemaVersion -ne 4) { throw 'Obsolete audit schema; start a new audit session with the current script.' }
+    if ($savedMetadata.schemaVersion -ne 5) { throw 'Obsolete audit schema; start a new audit session with the current script.' }
     $hostProfilePath = Resolve-FullPath $savedMetadata.roots.hostProfile
     $HostTemp = $savedMetadata.roots.temp
     $hostLocalPath = $savedMetadata.roots.local
@@ -490,7 +527,7 @@ switch ($Command) {
         $metadata = [ordered]@{}
         try {
             $metadata = [ordered]@{
-                schemaVersion = 4
+                schemaVersion = 5
                 sessionId = $sessionId
                 status = 'starting'
                 startedAtUtc = [DateTime]::UtcNow.ToString('o')
@@ -515,11 +552,13 @@ switch ($Command) {
                     (Join-Path $hostTempPath 'WinSAT'),
                     # Observed host registry log and Windows PowerShell startup cache.
                     (Join-Path $hostLocalPath 'Microsoft\Windows\UsrClass.dat.LOG1'),
+                    (Join-Path $hostLocalPath 'Microsoft\Windows\UsrClass.dat.LOG2'),
                     (Join-Path $hostLocalPath 'Microsoft\Windows\PowerShell\StartupProfileData-NonInteractive')
                 )
-                runnerStateExclusions = @(Get-RunnerStateExclusions $hostProfilePath $hostLocalPath)
-                policy = 'After exact bridge and OS exclusions, new, modified, metadataOnly host or canonical AppData entries fail except manifest-managed fonts and their containers; deleted entries are informational.'
-                exclusions = @('Any .ssh path component before filesystem access', 'Managed bridges and their container metadata', 'Canonical home except its forbidden AppData root', 'Audit state', 'Explicit command workspaces', 'Observed GitHub-hosted runner OS cache paths')
+                runnerStateExclusions = @(Get-RunnerStateExclusions $hostProfilePath $hostLocalPath $canonicalAppDataPath)
+                runnerStateEntries = @(Get-RunnerStateEntries $canonicalAppDataPath)
+                policy = 'After exact bridge and OS exclusions, new, modified, metadataOnly host or canonical AppData entries fail except manifest-managed fonts and observed GitHub-hosted runner state; deleted entries are informational.'
+                exclusions = @('Any .ssh path component before filesystem access', 'Managed bridges and their container metadata', 'Canonical home except its forbidden AppData root', 'Audit state', 'Explicit command workspaces', 'Observed GitHub-hosted runner OS paths and exact entries')
                 environment = [ordered]@{
                     HOME = $env:HOME; USERPROFILE = $env:USERPROFILE; APPDATA = $env:APPDATA
                     LOCALAPPDATA = $env:LOCALAPPDATA; TEMP = $env:TEMP; TMP = $env:TMP

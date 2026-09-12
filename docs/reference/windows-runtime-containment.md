@@ -128,9 +128,9 @@ Exclusions have narrow, documented purposes:
 | Managed bridges | Exact symlink and target endpoints, including the two canonical-profile PowerShell symlinks, plus their container metadata |
 | Audit state | The active audit's own files |
 | Workspace | Explicit `-WorkspaceRoots` entries |
-| Windows registry state | Observed `NTUSER.DAT` hive files and `Microsoft\Windows\UsrClass.dat.LOG1` |
+| Windows registry state | Observed `NTUSER.DAT` hive files and `Microsoft\Windows\UsrClass.dat.LOG1` / `LOG2` |
 | Windows OS state | Host temp `WinSAT` and the exact Windows PowerShell startup-cache path |
-| GitHub-hosted runner state | `Microsoft\Windows\WebCache` and `AppData\LocalLow\Microsoft\CryptnetUrlCache` |
+| GitHub-hosted runner state | Observed Windows, TokenBroker, Firefox and WinINet cache roots; exact empty canonical `AppData\Roaming` entry |
 
 The Windows PowerShell startup-cache exclusion below host Local AppData is:
 

@@ -49,7 +49,11 @@ Run-Case 'windows-powershell-startup-cache' { New-Item -ItemType Directory (Spli
 Run-Case 'windows-powershell-cache-sibling' { Set-Content (Join-Path (Split-Path $windowsStartupCache) 'unknown.state') 'x' } $true
 $usrClassLog = Join-Path $hostRoot 'AppData\Local\Microsoft\Windows\UsrClass.dat.LOG1'
 Run-Case 'host-registry-log' { New-Item -ItemType Directory (Split-Path $usrClassLog) -Force | Out-Null; Set-Content $usrClassLog 'x' } $false
+Run-Case 'host-registry-log2' { Set-Content (Join-Path (Split-Path $usrClassLog) 'UsrClass.dat.LOG2') 'x' } $false
 Run-Case 'host-registry-log-sibling' { Set-Content (Join-Path (Split-Path $usrClassLog) 'unknown.LOG1') 'x' } $true
+Run-Case 'canonical-write' { Set-Content (Join-Path $canonical 'allowed-state') 'x' } $false
+Run-Case 'canonical-appdata-container' { New-Item -ItemType Directory (Join-Path $canonical 'AppData') | Out-Null } $false
+Run-Case 'canonical-appdata-unknown' { Set-Content (Join-Path $canonical 'AppData\unknown.state') 'x' } $true
 $savedGithubActions = $env:GITHUB_ACTIONS
 $savedRunnerEnvironment = $env:RUNNER_ENVIRONMENT
 try {
@@ -60,16 +64,34 @@ try {
 
     $env:RUNNER_ENVIRONMENT = 'github-hosted'
     Run-Case 'runner-webcache' { Set-Content (Join-Path $webCache 'state-2') 'x' } $false
+    $inetCache = Join-Path $hostRoot 'AppData\Local\Microsoft\Windows\INetCache\IE'
+    Run-Case 'runner-inetcache' { New-Item -ItemType Directory $inetCache -Force | Out-Null; Set-Content (Join-Path $inetCache 'container.dat') 'x' } $false
+    Run-Case 'runner-inetcache-sibling' { Set-Content (Join-Path (Split-Path $inetCache) 'unknown.state') 'x' } $true
+    $tokenBroker = Join-Path $hostRoot 'AppData\Local\Microsoft\TokenBroker\Cache'
+    Run-Case 'runner-token-broker' { New-Item -ItemType Directory $tokenBroker -Force | Out-Null; Set-Content (Join-Path $tokenBroker 'fixture.tbres') 'x' } $false
+    Run-Case 'runner-token-broker-sibling' { Set-Content (Join-Path (Split-Path $tokenBroker) 'unknown.state') 'x' } $true
+    $localFirefox = Join-Path $hostRoot 'AppData\Local\Mozilla\Firefox'
+    Run-Case 'runner-local-firefox' { New-Item -ItemType Directory $localFirefox -Force | Out-Null; Set-Content (Join-Path $localFirefox 'fixture') 'x' } $false
+    Run-Case 'runner-local-firefox-sibling' { Set-Content (Join-Path (Split-Path $localFirefox) 'unknown.state') 'x' } $true
+    $roamingFirefox = Join-Path $hostRoot 'AppData\Roaming\Mozilla\Firefox'
+    Run-Case 'runner-roaming-firefox' { New-Item -ItemType Directory $roamingFirefox -Force | Out-Null; Set-Content (Join-Path $roamingFirefox 'fixture') 'x' } $false
+    Run-Case 'runner-roaming-firefox-sibling' { Set-Content (Join-Path (Split-Path $roamingFirefox) 'unknown.state') 'x' } $true
     $cryptnet = Join-Path $hostRoot 'AppData\LocalLow\Microsoft\CryptnetUrlCache\Content'
     Run-Case 'runner-cryptnet-cache' { New-Item -ItemType Directory $cryptnet -Force | Out-Null; Set-Content (Join-Path $cryptnet 'state') 'x' } $false
+    $canonicalWindows = Join-Path $canonical 'AppData\Local\Microsoft\Windows'
+    Run-Case 'runner-canonical-history' { New-Item -ItemType Directory (Join-Path $canonicalWindows 'History') -Force | Out-Null } $false
+    Run-Case 'runner-canonical-inetcache' { New-Item -ItemType Directory (Join-Path $canonicalWindows 'INetCache\IE') -Force | Out-Null; Set-Content (Join-Path $canonicalWindows 'INetCache\IE\container.dat') 'x' } $false
+    Run-Case 'runner-canonical-inetcookies' { New-Item -ItemType Directory (Join-Path $canonicalWindows 'INetCookies') -Force | Out-Null } $false
+    Run-Case 'runner-canonical-feeds-cache' { New-Item -ItemType Directory (Join-Path $canonical 'AppData\Local\Microsoft\Feeds Cache') -Force | Out-Null } $false
+    Run-Case 'runner-canonical-windows-sibling' { Set-Content (Join-Path $canonicalWindows 'unknown.state') 'x' } $true
+    $canonicalRoaming = Join-Path $canonical 'AppData\Roaming'
+    Run-Case 'runner-canonical-roaming-entry' { New-Item -ItemType Directory $canonicalRoaming | Out-Null } $false
+    Run-Case 'runner-canonical-roaming-child' { Set-Content (Join-Path $canonicalRoaming 'unknown.state') 'x' } $true
     Run-Case 'runner-exclusion-sibling' { Set-Content (Join-Path $hostRoot 'AppData\LocalLow\Microsoft\unknown.state') 'x' } $true
 } finally {
     if ($null -eq $savedGithubActions) { Remove-Item Env:GITHUB_ACTIONS -ErrorAction SilentlyContinue } else { $env:GITHUB_ACTIONS = $savedGithubActions }
     if ($null -eq $savedRunnerEnvironment) { Remove-Item Env:RUNNER_ENVIRONMENT -ErrorAction SilentlyContinue } else { $env:RUNNER_ENVIRONMENT = $savedRunnerEnvironment }
 }
-Run-Case 'canonical-write' { Set-Content (Join-Path $canonical 'allowed-state') 'x' } $false
-Run-Case 'canonical-appdata-container' { New-Item -ItemType Directory (Join-Path $canonical 'AppData') | Out-Null } $false
-Run-Case 'canonical-appdata-unknown' { Set-Content (Join-Path $canonical 'AppData\unknown.state') 'x' } $true
 $canonicalCacheSymlink = Join-Path $canonical 'AppData\Local\Microsoft\PowerShell\StartupProfileData-NonInteractive'
 Run-Case 'canonical-cache-symlink-endpoint' { New-Item -ItemType Directory (Split-Path $canonicalCacheSymlink) -Force | Out-Null; Set-Content $canonicalCacheSymlink 'x' } $false
 $canonicalTelemetrySymlink = Join-Path $canonical 'AppData\Local\Microsoft\PowerShell\telemetry.uuid'
