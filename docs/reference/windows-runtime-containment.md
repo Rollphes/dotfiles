@@ -21,8 +21,9 @@ directory through different path representations.
 | `XDG_CACHE_HOME` | `C:\msys64\home\<username>\.cache` |
 | `TEMP` / `TMP` | `C:\msys64\tmp` |
 
-The development profile has no `AppData` authority. The audit treats an
-`AppData` directory below the canonical home as retired and forbidden.
+The development profile has no `AppData` storage authority. Two managed file
+links may exist below its otherwise retired `AppData` path. Every other entry
+there remains forbidden.
 
 This contract is process-local. It does not change the Windows account,
 registry, Known Folders or environment stored by Windows.
@@ -35,11 +36,28 @@ meaning does not change when a development shell virtualizes `USERPROFILE`.
 
 Font and bridge scripts launch host-scoped PowerShell children when they must
 operate on host resources. Those children receive the registered host profile
-and AppData paths. Their temp directory remains `C:\msys64\tmp`, and they do not
-create an `AppData` directory below the canonical home.
+and AppData paths. Their temp directory remains `C:\msys64\tmp`. The bridge
+reconciler creates canonical `AppData` containers only for the two reverse link
+endpoints described below.
 
 Managed user fonts remain in the registered host Local AppData directory.
 Existing runtime data is neither migrated nor deleted.
+
+PowerShell on Windows derives its startup directory from the Windows
+`LocalApplicationData` Known Folder even when process `LOCALAPPDATA` points to
+XDG data. Two reverse bridges contain those writes without changing Windows:
+
+```text
+C:\msys64\home\<username>\AppData\Local\Microsoft\PowerShell\StartupProfileData-NonInteractive
+  -> <host Local AppData>\Microsoft\PowerShell\StartupProfileData-NonInteractive
+
+C:\msys64\home\<username>\AppData\Local\Microsoft\PowerShell\telemetry.uuid
+  -> <host Local AppData>\Microsoft\PowerShell\telemetry.uuid
+```
+
+Only these file endpoints are reversed. The bridge reconciler does not replace
+an existing canonical file or directory; it reports a topology conflict for
+manual resolution.
 
 ## Tool Behavior
 
@@ -106,19 +124,21 @@ Exclusions have narrow, documented purposes:
 
 | Category | Paths |
 | --- | --- |
-| Managed bridges | Exact chezmoi-managed bridge roots and their container metadata |
+| Managed bridges | Exact link and target endpoints, including the two reverse PowerShell links, plus their container metadata |
 | Audit state | The active audit's own files |
 | Workspace | Explicit `-WorkspaceRoots` entries |
 | Windows registry state | Observed `NTUSER.DAT` hive files and `Microsoft\Windows\UsrClass.dat.LOG1` |
-| Windows OS state | Host temp `WinSAT` and the two exact PowerShell startup-cache paths |
+| Windows OS state | Host temp `WinSAT` and the exact Windows PowerShell startup-cache path |
 | GitHub-hosted runner state | `Microsoft\Windows\WebCache` and `AppData\LocalLow\Microsoft\CryptnetUrlCache` |
 
-The PowerShell startup-cache paths below host Local AppData are:
+The Windows PowerShell startup-cache exclusion below host Local AppData is:
 
 ```text
-Microsoft\PowerShell\StartupProfileData-NonInteractive
 Microsoft\Windows\PowerShell\StartupProfileData-NonInteractive
 ```
+
+PowerShell 7 startup data under `Microsoft\PowerShell` is classified through
+the reverse bridge endpoints instead of the OS-state exclusion.
 
 Runner exclusions apply only when both `GITHUB_ACTIONS=true` and
 `RUNNER_ENVIRONMENT=github-hosted`. Adjacent paths remain monitored.

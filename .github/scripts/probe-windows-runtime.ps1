@@ -42,10 +42,6 @@ foreach ($pair in @(
     $value = [Environment]::GetEnvironmentVariable($pair[0])
     if ((Native-Path $value) -ine (Join-Path $developmentHome $pair[1])) { throw "Unexpected $($pair[0]): $value" }
 }
-if ([IO.Directory]::Exists((Join-Path $developmentHome 'AppData'))) {
-    throw 'The canonical development home contains the retired AppData tree'
-}
-
 & "$PSScriptRoot/test-windows-git-credential.ps1" -DevelopmentHome $developmentHome
 foreach ($name in 'XDG_CONFIG_HOME','XDG_DATA_HOME','XDG_STATE_HOME','XDG_CACHE_HOME',
     'MISE_CONFIG_DIR','MISE_DATA_DIR','MISE_STATE_DIR','MISE_CACHE_DIR','MISE_TMP_DIR',

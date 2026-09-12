@@ -139,25 +139,20 @@ if (-not $ghqInstall.StartsWith(
     throw "mise install escaped the MSYS2 home: $ghqInstall"
 }
 
-$bridges = (chezmoi --source $env:GITHUB_WORKSPACE execute-template '{{ .windows.bridges | toJson }}') | ConvertFrom-Json
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-foreach ($bridge in $bridges) {
-    $relativePath = $bridge.path
-    $linkPath = Join-Path $env:DOTFILES_CI_HOST_PROFILE $relativePath
-    $expected = Join-Path $env:HOME $relativePath
+function Assert-SymbolicLinkTarget([string] $LinkPath, [string] $ExpectedTarget) {
     $link = Get-Item -LiteralPath $linkPath -Force
     if ($link.LinkType -ne 'SymbolicLink') {
-        throw "Bridge is not a symbolic link: $linkPath"
+        throw "Bridge is not a symbolic link: $LinkPath"
     }
     $resolvedTarget = $link.ResolveLinkTarget($false)
     if ($null -eq $resolvedTarget) {
-        throw "Unable to resolve bridge target: $linkPath"
+        throw "Unable to resolve bridge target: $LinkPath"
     }
     $actual = [IO.Path]::GetFullPath($resolvedTarget.FullName).TrimEnd(
         [IO.Path]::DirectorySeparatorChar,
         [IO.Path]::AltDirectorySeparatorChar
     )
-    $expected = [IO.Path]::GetFullPath($expected).TrimEnd(
+    $expected = [IO.Path]::GetFullPath($ExpectedTarget).TrimEnd(
         [IO.Path]::DirectorySeparatorChar,
         [IO.Path]::AltDirectorySeparatorChar
     )
@@ -166,8 +161,25 @@ foreach ($bridge in $bridges) {
         $expected,
         [StringComparison]::OrdinalIgnoreCase
     )) {
-        throw "Unexpected bridge target: $linkPath -> $actual"
+        throw "Unexpected bridge target: $LinkPath -> $actual"
     }
+}
+
+$bridges = (chezmoi --source $env:GITHUB_WORKSPACE execute-template '{{ .windows.bridges | toJson }}') | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+foreach ($bridge in @($bridges)) {
+    $relativePath = $bridge.path
+    Assert-SymbolicLinkTarget `
+        (Join-Path $env:DOTFILES_CI_HOST_PROFILE $relativePath) `
+        (Join-Path $env:HOME $relativePath)
+}
+
+$reverseBridges = (chezmoi --source $env:GITHUB_WORKSPACE execute-template '{{ .windows.reverseBridges | toJson }}') | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+foreach ($bridge in @($reverseBridges)) {
+    Assert-SymbolicLinkTarget `
+        (Join-Path $env:HOME $bridge.linkPath) `
+        (Join-Path $env:DOTFILES_CI_HOST_LOCALAPPDATA $bridge.targetPath)
 }
 
 $secondAuditState = "$env:HOME\.local\state\dotfiles-leakage-ci\second"

@@ -26,8 +26,8 @@ fail() {
 fail_topology_conflict() {
     name="$1"
     kind="$2"
-    dst="$3"
-    src="$4"
+    link="$3"
+    target="$4"
     actual_type="$5"
 
     console_status \
@@ -37,9 +37,9 @@ fail_topology_conflict() {
         "topology conflict" >&2
 
     printf '\n' >&2
-    console_detail "actual" "Windows $actual_type: $dst" >&2
-    console_detail "expected" "Windows symlink: $dst" >&2
-    console_detail "target" "MSYS2 canonical target: $src" >&2
+    console_detail "actual" "$actual_type: $link" >&2
+    console_detail "expected" "symlink: $link" >&2
+    console_detail "target" "$target" >&2
 
     console_failed "$component"
     exit 1
@@ -48,7 +48,7 @@ fail_topology_conflict() {
 fail_wrong_target() {
     name="$1"
     kind="$2"
-    dst="$3"
+    link="$3"
     actual="$4"
     expected="$5"
 
@@ -59,7 +59,7 @@ fail_wrong_target() {
         "wrong symlink target" >&2
 
     printf '\n' >&2
-    console_detail "link" "$dst" >&2
+    console_detail "link" "$link" >&2
     console_detail "actual" "$actual" >&2
     console_detail "expected" "$expected" >&2
 
@@ -67,21 +67,21 @@ fail_wrong_target() {
     exit 1
 }
 
-fail_broken_link() {
+fail_unreadable_link() {
     name="$1"
     kind="$2"
-    dst="$3"
-    src="$4"
+    link="$3"
+    target="$4"
 
     console_status \
         "ERROR" \
         "$name" \
         "$kind" \
-        "broken symlink" >&2
+        "unreadable symlink" >&2
 
     printf '\n' >&2
-    console_detail "link" "$dst" >&2
-    console_detail "expected" "$src" >&2
+    console_detail "link" "$link" >&2
+    console_detail "expected" "$target" >&2
 
     console_failed "$component"
     exit 1
@@ -106,9 +106,20 @@ fail_link_privilege() {
     exit 1
 }
 
-resolve_path() {
-    realpath "$1" 2>/dev/null || return 1
+normalize_path() {
+    realpath -m "$1" 2>/dev/null || return 1
 }
+
+resolve_link_target() (
+    link="$1"
+    target=$(readlink "$link") || return 1
+    case "$target" in
+        [A-Za-z]:[\\/]*) target=$(cygpath -u "$target") || return 1 ;;
+        /*) ;;
+        *) target="$(dirname "$link")/$target" ;;
+    esac
+    normalize_path "$target"
+)
 
 # Keep filesystem operations in the MSYS2 POSIX namespace.
 msys_home=$(cygpath -u "{{ .chezmoi.destDir }}")
@@ -133,9 +144,25 @@ host_profile=$(windows_run_host_powershell \
 win_home=$(cygpath -u "$(printf '%s' "$host_profile" | tr -d '\r')")
 [ "$win_home" != "$msys_home" ] || fail "Host and development profiles must differ"
 
+windows_local_app_data=$(windows_run_host_powershell \
+    "$host_profile_hint" \
+    "$host_app_data_hint" \
+    "$host_local_app_data_hint" \
+    -NoProfile -NonInteractive -Command \
+    '(Get-ItemProperty -LiteralPath "Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders" -Name "Local AppData" -ErrorAction Stop)."Local AppData"' \
+    | tr -d '\r') || fail "Cannot resolve the registered Windows Local AppData"
+[ -n "$windows_local_app_data" ] || fail "Registered Windows Local AppData is empty"
+win_local_app_data=$(cygpath -u "$windows_local_app_data")
+case "$win_local_app_data/" in
+    "$msys_home"/*) fail "Windows Local AppData must remain outside the development home" ;;
+esac
+
 reconcile_one() {
     kind="$1"
     name="$2"
+    link="$3"
+    target="$4"
+    allow_missing_target="$5"
 
     case "$kind" in
         dir|file)
@@ -145,35 +172,32 @@ reconcile_one() {
             ;;
     esac
 
-    src="$msys_home/$name"
-    dst="$win_home/$name"
+    if [ -L "$link" ]; then
+        actual=$(resolve_link_target "$link") ||
+            fail_unreadable_link "$name" "$kind" "$link" "$target"
 
-    if [ -L "$dst" ]; then
-        actual=$(resolve_path "$dst") ||
-            fail_broken_link "$name" "$kind" "$dst" "$src"
-
-        expected=$(resolve_path "$src") ||
-            fail_broken_link "$name" "$kind" "$dst" "$src"
+        expected=$(normalize_path "$target") ||
+            fail_unreadable_link "$name" "$kind" "$link" "$target"
 
         if [ "$actual" != "$expected" ]; then
-            fail_wrong_target "$name" "$kind" "$dst" "$actual" "$expected"
+            fail_wrong_target "$name" "$kind" "$link" "$actual" "$expected"
         fi
 
         console_status \
             "OK" \
             "$name" \
             "$kind" \
-            "link: $dst -> target: $src"
+            "link: $link -> target: $target"
 
         ok_count=$((ok_count + 1))
         return 0
     fi
 
-    # Never replace a real Windows-side resource automatically.
-    if [ -e "$dst" ]; then
-        if [ -d "$dst" ]; then
+    # Never replace a real resource at a selected link endpoint.
+    if [ -e "$link" ]; then
+        if [ -d "$link" ]; then
             actual_type="real directory"
-        elif [ -f "$dst" ]; then
+        elif [ -f "$link" ]; then
             actual_type="real file"
         else
             actual_type="real filesystem entry"
@@ -182,37 +206,36 @@ reconcile_one() {
         fail_topology_conflict \
             "$name" \
             "$kind" \
-            "$dst" \
-            "$src" \
+            "$link" \
+            "$target" \
             "$actual_type"
     fi
 
-    if [ "$kind" = "dir" ] && [ ! -e "$src" ]; then
-        mkdir -p "$src"
+    if [ "$kind" = "dir" ] && [ ! -e "$target" ]; then
+        mkdir -p "$target"
     fi
 
-    if [ ! -e "$src" ]; then
+    if [ ! -e "$target" ] && [ "$allow_missing_target" != "true" ]; then
         console_status \
             "WARN" \
             "$name" \
             "$kind" \
-            "canonical target missing: $src" >&2
+            "target missing: $target" >&2
 
         warn_count=$((warn_count + 1))
         return 0
     fi
 
-    # Only the selected child is bridged; its parent remains host-local.
-    mkdir -p "$(dirname "$dst")"
+    mkdir -p "$(dirname "$link")"
 
-    dst_win=$(cygpath -w "$dst")
-    src_win=$(cygpath -w "$src")
+    link_win=$(cygpath -w "$link")
+    target_win=$(cygpath -w "$target")
 
     if [ "$kind" = "dir" ]; then
-        cmd.exe /c mklink /D "$dst_win" "$src_win" >/dev/null ||
+        cmd.exe /c mklink /D "$link_win" "$target_win" >/dev/null ||
             fail_link_privilege "$name" "$kind"
     else
-        cmd.exe /c mklink "$dst_win" "$src_win" >/dev/null ||
+        cmd.exe /c mklink "$link_win" "$target_win" >/dev/null ||
             fail_link_privilege "$name" "$kind"
     fi
 
@@ -220,16 +243,30 @@ reconcile_one() {
         "CREATED" \
         "$name" \
         "$kind" \
-        "link: $dst -> target: $src"
+        "link: $link -> target: $target"
 
     created_count=$((created_count + 1))
 }
 
 console_header "$component" "Reconciling cross-home bridges"
-console_context "topology: Windows symlink -> MSYS2 canonical target"
+console_context "topology: manifest-selected link and target endpoints"
 
 {{ range .windows.bridges -}}
-reconcile_one "{{ .kind }}" "{{ .path }}"
+reconcile_one \
+    "{{ .kind }}" \
+    "{{ .path }}" \
+    "$win_home/{{ .path }}" \
+    "$msys_home/{{ .path }}" \
+    "false"
+{{ end -}}
+
+{{ range .windows.reverseBridges -}}
+reconcile_one \
+    "{{ .kind }}" \
+    "{{ .linkPath }}" \
+    "$msys_home/{{ .linkPath }}" \
+    "$win_local_app_data/{{ .targetPath }}" \
+    "true"
 {{ end -}}
 
 console_complete \

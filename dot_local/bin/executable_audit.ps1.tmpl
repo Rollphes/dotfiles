@@ -26,9 +26,19 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $MonitoredRootIds = @('hostProfile', 'local', 'roaming', 'temp', 'canonicalAppData')
-$DefaultManagedBridgePaths = @(
+$DefaultHostBridgePaths = @(
 {{ range .windows.bridges -}}
     '{{ .path }}'
+{{ end -}}
+)
+$DefaultReverseBridgeLinks = @(
+{{ range .windows.reverseBridges -}}
+    '{{ .linkPath }}'
+{{ end -}}
+)
+$DefaultReverseBridgeTargets = @(
+{{ range .windows.reverseBridges -}}
+    '{{ .targetPath }}'
 {{ end -}}
 )
 $ManagedFontPatterns = @(
@@ -166,7 +176,8 @@ public static class AuditSnapshotWriter
                 throw new InvalidOperationException("Snapshot root is excluded");
             if (Directory.Exists(root))
             {
-                if (includeRoot) WriteEntry(writer, root, ".", hashFiles);
+                if (includeRoot && !IsExclusionContainer(root, excludedRoots))
+                    WriteEntry(writer, root, ".", hashFiles);
                 WriteTree(writer, root, root, "", hashFiles, excludedRoots ?? Array.Empty<string>());
             }
         }
@@ -194,7 +205,7 @@ public static class AuditSnapshotWriter
                 if (!String.IsNullOrEmpty(relativeBase)) relative = Path.Combine(relativeBase, relative);
                 // Ancestors of excluded bridges are containers, not audited state.
                 // Still descend to detect writes to every non-excluded sibling.
-                if (!Array.Exists(exclusions, x => x.StartsWith(path.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)))
+                if (!IsExclusionContainer(path, exclusions))
                     WriteEntry(writer, path, relative, hashFiles);
                 if ((attributes & FileAttributes.Directory) != 0 &&
                     (attributes & FileAttributes.ReparsePoint) == 0)
@@ -244,6 +255,13 @@ public static class AuditSnapshotWriter
                 return true;
         }
         return false;
+    }
+
+    private static bool IsExclusionContainer(string path, string[] roots)
+    {
+        var container = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+        return Array.Exists(roots, root => Path.GetFullPath(root).StartsWith(container, StringComparison.OrdinalIgnoreCase));
     }
 
     private static string Csv(string value)
@@ -351,7 +369,7 @@ function New-Report {
     Add-DiffSection $lines 'HOST PROFILE WRITES' $Diffs.hostProfile
     Add-DiffSection $lines 'RETIRED CANONICAL APPDATA WRITES' $Diffs.canonicalAppData
     $lines.Add('MANAGED BRIDGE')
-    $lines.Add('  Excluded from host-profile leakage candidates:')
+    $lines.Add('  Excluded bridge endpoints:')
     foreach ($path in @($Metadata.managedBridgeRoots)) { $lines.Add("    $path") }
     $lines.Add('OS STATE EXCLUSIONS (observed locked/inaccessible paths)')
     foreach ($path in @($Metadata.osStateExclusions)) { $lines.Add("    $path") }
@@ -500,13 +518,12 @@ switch ($Command) {
                 osStateExclusions = @(Get-OSStateExclusions $hostProfilePath) + @(
                     # Observed inaccessible Windows performance assessment state.
                     (Join-Path $hostTempPath 'WinSAT'),
-                    # Observed host registry log and PowerShell startup cache.
+                    # Observed host registry log and Windows PowerShell startup cache.
                     (Join-Path $hostLocalPath 'Microsoft\Windows\UsrClass.dat.LOG1'),
-                    (Join-Path $hostLocalPath 'Microsoft\PowerShell\StartupProfileData-NonInteractive'),
                     (Join-Path $hostLocalPath 'Microsoft\Windows\PowerShell\StartupProfileData-NonInteractive')
                 )
                 runnerStateExclusions = @(Get-RunnerStateExclusions $hostProfilePath $hostLocalPath)
-                policy = 'New, modified, metadataOnly host or canonical AppData entries fail except manifest-managed fonts and their containers; deleted entries are informational.'
+                policy = 'After exact bridge and OS exclusions, new, modified, metadataOnly host or canonical AppData entries fail except manifest-managed fonts and their containers; deleted entries are informational.'
                 exclusions = @('Any .ssh path component before filesystem access', 'Managed bridges and their container metadata', 'Canonical home except its forbidden AppData root', 'Audit state', 'Explicit command workspaces', 'Observed GitHub-hosted runner OS cache paths')
                 environment = [ordered]@{
                     HOME = $env:HOME; USERPROFILE = $env:USERPROFILE; APPDATA = $env:APPDATA
@@ -514,9 +531,17 @@ switch ($Command) {
                     XDG_CONFIG_HOME = $env:XDG_CONFIG_HOME; XDG_DATA_HOME = $env:XDG_DATA_HOME
                     XDG_STATE_HOME = $env:XDG_STATE_HOME; XDG_CACHE_HOME = $env:XDG_CACHE_HOME
                 }
-                managedBridgeRoots = @($DefaultManagedBridgePaths | ForEach-Object {
-                    Resolve-FullPath (Join-Path $hostProfilePath ($_ -replace '/', '\'))
-                })
+                managedBridgeRoots = @(
+                    @($DefaultHostBridgePaths | ForEach-Object {
+                        Resolve-FullPath (Join-Path $hostProfilePath ($_ -replace '/', '\'))
+                    })
+                    @($DefaultReverseBridgeLinks | ForEach-Object {
+                        Resolve-FullPath (Join-Path $canonicalHomePath ($_ -replace '/', '\'))
+                    })
+                    @($DefaultReverseBridgeTargets | ForEach-Object {
+                        Resolve-FullPath (Join-Path $hostLocalPath ($_ -replace '/', '\'))
+                    })
+                )
             }
             Write-JsonFile $metadata (Join-Path $sessionDirectory 'metadata.json')
             New-SnapshotSet $metadata (Join-Path $sessionDirectory 'before')

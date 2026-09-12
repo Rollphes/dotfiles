@@ -25,3 +25,13 @@ kind = "file"
 [[windows.bridges]]
 path = ".npmrc"
 kind = "file"
+
+[[windows.reverseBridges]]
+linkPath = "AppData/Local/Microsoft/PowerShell/StartupProfileData-NonInteractive"
+targetPath = "Microsoft/PowerShell/StartupProfileData-NonInteractive"
+kind = "file"
+
+[[windows.reverseBridges]]
+linkPath = "AppData/Local/Microsoft/PowerShell/telemetry.uuid"
+targetPath = "Microsoft/PowerShell/telemetry.uuid"
+kind = "file"
