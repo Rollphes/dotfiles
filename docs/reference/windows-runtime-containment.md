@@ -1,8 +1,7 @@
 # Windows Runtime Containment
 
-This document defines the Windows and MSYS2 runtime boundary, including the
-filesystem audit used for STG5 leakage closure. For installation steps, see
-[Windows Setup].
+This document defines the Windows and MSYS2 runtime boundary and its filesystem
+leakage audit. For installation steps, see [Windows Setup].
 
 [Windows Setup]: ../setup/windows.md
 
