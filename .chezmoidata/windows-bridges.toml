@@ -1,73 +1,46 @@
-# topology: Windows USERPROFILE symlink -> MSYS2 canonical USERPROFILE target
-[[windows.bridges]]
-symlinkRoot = "windowsUserProfile"
-symlink = ".config/wezterm"
-targetRoot = "msys2UserProfile"
-target = ".config/wezterm"
+# topology: Windows-native USERPROFILE symlink -> MSYS2 canonical USERPROFILE target
+[[windows.bridges.windowsToMsys2]]
+path = ".config/wezterm"
 kind = "dir"
 allowMissingTarget = false
 
-[[windows.bridges]]
-symlinkRoot = "windowsUserProfile"
-symlink = ".agents"
-targetRoot = "msys2UserProfile"
-target = ".agents"
+[[windows.bridges.windowsToMsys2]]
+path = ".agents"
 kind = "dir"
 allowMissingTarget = false
 
-[[windows.bridges]]
-symlinkRoot = "windowsUserProfile"
-symlink = ".claude"
-targetRoot = "msys2UserProfile"
-target = ".claude"
+[[windows.bridges.windowsToMsys2]]
+path = ".claude"
 kind = "dir"
 allowMissingTarget = false
 
-[[windows.bridges]]
-symlinkRoot = "windowsUserProfile"
-symlink = ".codex"
-targetRoot = "msys2UserProfile"
-target = ".codex"
+[[windows.bridges.windowsToMsys2]]
+path = ".codex"
 kind = "dir"
 allowMissingTarget = false
 
-[[windows.bridges]]
-symlinkRoot = "windowsUserProfile"
-symlink = ".claude.json"
-targetRoot = "msys2UserProfile"
-target = ".claude.json"
+[[windows.bridges.windowsToMsys2]]
+path = ".claude.json"
 kind = "file"
 allowMissingTarget = false
 
-[[windows.bridges]]
-symlinkRoot = "windowsUserProfile"
-symlink = ".gitconfig"
-targetRoot = "msys2UserProfile"
-target = ".gitconfig"
+[[windows.bridges.windowsToMsys2]]
+path = ".gitconfig"
 kind = "file"
 allowMissingTarget = false
 
-[[windows.bridges]]
-symlinkRoot = "windowsUserProfile"
-symlink = ".npmrc"
-targetRoot = "msys2UserProfile"
-target = ".npmrc"
+[[windows.bridges.windowsToMsys2]]
+path = ".npmrc"
 kind = "file"
 allowMissingTarget = false
 
-# topology: MSYS2 canonical USERPROFILE symlink -> Windows LocalAppData target
-[[windows.bridges]]
-symlinkRoot = "msys2UserProfile"
-symlink = "AppData/Local/Microsoft/PowerShell/StartupProfileData-NonInteractive"
-targetRoot = "windowsLocalAppData"
-target = "Microsoft/PowerShell/StartupProfileData-NonInteractive"
+# topology: MSYS2 canonical USERPROFILE symlink -> Windows-native USERPROFILE target
+[[windows.bridges.msys2ToWindows]]
+path = "AppData/Local/Microsoft/PowerShell/StartupProfileData-NonInteractive"
 kind = "file"
 allowMissingTarget = true
 
-[[windows.bridges]]
-symlinkRoot = "msys2UserProfile"
-symlink = "AppData/Local/Microsoft/PowerShell/telemetry.uuid"
-targetRoot = "windowsLocalAppData"
-target = "Microsoft/PowerShell/telemetry.uuid"
+[[windows.bridges.msys2ToWindows]]
+path = "AppData/Local/Microsoft/PowerShell/telemetry.uuid"
 kind = "file"
 allowMissingTarget = true

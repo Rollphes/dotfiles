@@ -144,28 +144,6 @@ host_profile=$(windows_run_host_powershell \
 windows_user_profile=$(cygpath -u "$(printf '%s' "$host_profile" | tr -d '\r')")
 [ "$windows_user_profile" != "$msys2_user_profile" ] || fail "Host and development profiles must differ"
 
-windows_local_app_data=$(windows_run_host_powershell \
-    "$host_profile_hint" \
-    "$host_app_data_hint" \
-    "$host_local_app_data_hint" \
-    -NoProfile -NonInteractive -Command \
-    '(Get-ItemProperty -LiteralPath "Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders" -Name "Local AppData" -ErrorAction Stop)."Local AppData"' \
-    | tr -d '\r') || fail "Cannot resolve the registered Windows Local AppData"
-[ -n "$windows_local_app_data" ] || fail "Registered Windows Local AppData is empty"
-windows_local_app_data=$(cygpath -u "$windows_local_app_data")
-case "$windows_local_app_data/" in
-    "$msys2_user_profile"/*) fail "Windows Local AppData must remain outside the development home" ;;
-esac
-
-resolve_bridge_root() {
-    case "$1" in
-        windowsUserProfile) printf '%s\n' "$windows_user_profile" ;;
-        msys2UserProfile) printf '%s\n' "$msys2_user_profile" ;;
-        windowsLocalAppData) printf '%s\n' "$windows_local_app_data" ;;
-        *) fail "unknown bridge root '$1'" ;;
-    esac
-}
-
 reconcile_one() {
     kind="$1"
     name="$2"
@@ -258,19 +236,32 @@ reconcile_one() {
 }
 
 console_header "$component" "Reconciling cross-home bridges"
-console_detail "topology" "Windows USERPROFILE symlink -> MSYS2 canonical USERPROFILE target"
-console_detail "topology" "MSYS2 canonical USERPROFILE symlink -> Windows LocalAppData target"
+console_detail "topology" "Windows-native USERPROFILE symlink -> MSYS2 canonical USERPROFILE target"
+console_detail "topology" "MSYS2 canonical USERPROFILE symlink -> Windows-native USERPROFILE target"
 printf '\n'
 
-{{ range .windows.bridges -}}
-symlink_root=$(resolve_bridge_root "{{ .symlinkRoot }}")
-target_root=$(resolve_bridge_root "{{ .targetRoot }}")
+{{ range $topology, $_ := .windows.bridges -}}
+{{ if and (ne $topology "windowsToMsys2") (ne $topology "msys2ToWindows") -}}
+fail "unknown bridge topology '{{ $topology }}'"
+{{ end -}}
+{{ end -}}
+
+{{ range .windows.bridges.windowsToMsys2 -}}
 reconcile_one \
     "{{ .kind }}" \
-    "{{ .symlink }}" \
-    "$symlink_root/{{ .symlink }}" \
-    "$target_root/{{ .target }}" \
-    "{{ if .allowMissingTarget }}true{{ else }}false{{ end }}"
+    "{{ .path }}" \
+    "$windows_user_profile/{{ .path }}" \
+    "$msys2_user_profile/{{ .path }}" \
+    "{{ .allowMissingTarget }}"
+{{ end -}}
+
+{{ range .windows.bridges.msys2ToWindows -}}
+reconcile_one \
+    "{{ .kind }}" \
+    "{{ .path }}" \
+    "$msys2_user_profile/{{ .path }}" \
+    "$windows_user_profile/{{ .path }}" \
+    "{{ .allowMissingTarget }}"
 {{ end -}}
 
 console_complete \

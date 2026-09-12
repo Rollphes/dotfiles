@@ -49,13 +49,13 @@ Windows:
 
 ```text
 C:\msys64\home\<username>\AppData\Local\Microsoft\PowerShell\StartupProfileData-NonInteractive
-  -> <host Local AppData>\Microsoft\PowerShell\StartupProfileData-NonInteractive
+  -> <Windows USERPROFILE>\AppData\Local\Microsoft\PowerShell\StartupProfileData-NonInteractive
 
 C:\msys64\home\<username>\AppData\Local\Microsoft\PowerShell\telemetry.uuid
-  -> <host Local AppData>\Microsoft\PowerShell\telemetry.uuid
+  -> <Windows USERPROFILE>\AppData\Local\Microsoft\PowerShell\telemetry.uuid
 ```
 
-Only these canonical file endpoints point into host Local AppData. The bridge
+Only these canonical file endpoints point into the Windows profile. The bridge
 reconciler does not replace an existing canonical file or directory; it reports
 a topology conflict for manual resolution.
 

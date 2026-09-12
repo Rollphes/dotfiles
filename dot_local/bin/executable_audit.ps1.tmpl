@@ -26,14 +26,14 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $MonitoredRootIds = @('hostProfile', 'local', 'roaming', 'temp', 'canonicalAppData')
-$DefaultManagedBridges = @(
-{{ range .windows.bridges -}}
-    [pscustomobject]@{
-        symlinkRoot = '{{ .symlinkRoot }}'
-        symlink = '{{ .symlink }}'
-        targetRoot = '{{ .targetRoot }}'
-        target = '{{ .target }}'
-    }
+$DefaultWindowsToMsys2BridgePaths = @(
+{{ range .windows.bridges.windowsToMsys2 -}}
+    '{{ .path }}'
+{{ end -}}
+)
+$DefaultMsys2ToWindowsBridgePaths = @(
+{{ range .windows.bridges.msys2ToWindows -}}
+    '{{ .path }}'
 {{ end -}}
 )
 $ManagedFontPatterns = @(
@@ -87,21 +87,6 @@ function Resolve-StateRoot {
         return Resolve-FullPath (Join-Path $env:XDG_STATE_HOME 'dotfiles-leakage-audit')
     }
     return Resolve-FullPath (Join-Path $HomePath '.local\state\dotfiles-leakage-audit')
-}
-
-function Resolve-BridgeRoot {
-    param(
-        [Parameter(Mandatory)][string] $Name,
-        [Parameter(Mandatory)][string] $CanonicalHomePath,
-        [Parameter(Mandatory)][string] $HostProfilePath,
-        [Parameter(Mandatory)][string] $HostLocalAppDataPath
-    )
-    switch ($Name) {
-        'msys2UserProfile' { return $CanonicalHomePath }
-        'windowsUserProfile' { return $HostProfilePath }
-        'windowsLocalAppData' { return $HostLocalAppDataPath }
-        default { throw "Unknown bridge root: $Name" }
-    }
 }
 
 function Get-OSStateExclusions([string] $ProfilePath) {
@@ -542,19 +527,15 @@ switch ($Command) {
                     XDG_STATE_HOME = $env:XDG_STATE_HOME; XDG_CACHE_HOME = $env:XDG_CACHE_HOME
                 }
                 managedBridgeRoots = @(
-                    @($DefaultManagedBridges | ForEach-Object {
-                        $symlinkRoot = Resolve-BridgeRoot `
-                            $_.symlinkRoot `
-                            $canonicalHomePath `
-                            $hostProfilePath `
-                            $hostLocalPath
-                        $targetRoot = Resolve-BridgeRoot `
-                            $_.targetRoot `
-                            $canonicalHomePath `
-                            $hostProfilePath `
-                            $hostLocalPath
-                        Resolve-FullPath (Join-Path $symlinkRoot ($_.symlink -replace '/', '\'))
-                        Resolve-FullPath (Join-Path $targetRoot ($_.target -replace '/', '\'))
+                    @($DefaultWindowsToMsys2BridgePaths | ForEach-Object {
+                        $relativePath = $_ -replace '/', '\'
+                        Resolve-FullPath (Join-Path $hostProfilePath $relativePath)
+                        Resolve-FullPath (Join-Path $canonicalHomePath $relativePath)
+                    })
+                    @($DefaultMsys2ToWindowsBridgePaths | ForEach-Object {
+                        $relativePath = $_ -replace '/', '\'
+                        Resolve-FullPath (Join-Path $canonicalHomePath $relativePath)
+                        Resolve-FullPath (Join-Path $hostProfilePath $relativePath)
                     })
                 )
             }
