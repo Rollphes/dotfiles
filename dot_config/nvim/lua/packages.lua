@@ -19,4 +19,7 @@ vim.pack.add({
     { src = "https://github.com/rachartier/tiny-cmdline.nvim" },
     { src = "https://github.com/windwp/nvim-ts-autotag" },
     { src = "https://github.com/b0o/schemastore.nvim" },
+    { src = "https://github.com/SmiteshP/nvim-navic" },
+    { src = "https://github.com/MunifTanjim/nui.nvim" },
+    { src = "https://github.com/hasansujon786/nvim-navbuddy" },
 })
