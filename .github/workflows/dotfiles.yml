@@ -57,16 +57,11 @@ jobs:
           "DOTFILES_CI_HOST_APPDATA=$hostRoamingAppData" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           "DOTFILES_CI_HOST_TEMP=$hostTemp" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           $msysHome = "C:\msys64\home\$env:USERNAME"
-          $cargoHome = "$msysHome\.cargo"
           $msysTemp = 'C:\msys64\tmp'
           New-Item -ItemType Directory -Force -Path $msysHome, $msysTemp | Out-Null
           # Keep runner shells on the real host profile. Each Windows step enters
           # the development contract only after PowerShell has finished startup.
           "DOTFILES_CI_DEVELOPMENT_HOME=$msysHome" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
-          'C:\msys64\ucrt64\bin' | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
-          'C:\msys64\usr\bin' | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
-          "$msysHome\.local\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
-          "$cargoHome\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
 
           # The runner must already permit symlinks. Never alter registry or
           # remove conflicting host resources to make bridge checks pass.

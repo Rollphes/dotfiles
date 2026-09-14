@@ -49,5 +49,7 @@ $env:PATH = @(
     (Join-Path $developmentHomePath '.local\bin'),
     (Join-Path $xdgDataHome 'mise\shims'),
     (Join-Path $env:CARGO_HOME 'bin'),
+    'C:\msys64\ucrt64\bin',
+    'C:\msys64\usr\bin',
     $env:PATH
 ) -join ';'
