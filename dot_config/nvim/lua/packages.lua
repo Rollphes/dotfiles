@@ -18,4 +18,5 @@ vim.pack.add({
     { src = "https://github.com/rachartier/tiny-inline-diagnostic.nvim" },
     { src = "https://github.com/rachartier/tiny-cmdline.nvim" },
     { src = "https://github.com/windwp/nvim-ts-autotag" },
+    { src = "https://github.com/b0o/schemastore.nvim" },
 })
