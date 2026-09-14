@@ -23,6 +23,10 @@ fi
 console_status "OK" "mise" "tool" "available"
 
 if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+    # Add one bounded attempt to mise's transient-only HTTP retry budget. This
+    # still fails permanent errors and exhausted GitHub Releases outages.
+    MISE_HTTP_RETRIES=4
+    export MISE_HTTP_RETRIES
     console_status "SKIP" "cargo:*" "backend" "excluded in CI"
     console_status "SKIP" "go, go:*" "backend" "excluded in CI"
     if grep -Eq '^(go[[:space:]]*=|"go:[^"]+"[[:space:]]*=)' "$XDG_CONFIG_HOME/mise/config.toml"; then
