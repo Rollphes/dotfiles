@@ -49,15 +49,24 @@ local function windows_shell()
     local msys2_root = "C:\\msys64"
     local env = msys2_root .. "\\usr\\bin\\env.exe"
     local fish = msys2_root .. "\\usr\\bin\\fish.exe"
+    local home = "/home/" .. vim.env.USERNAME
 
     if vim.fn.executable(env) ~= 1 or vim.fn.executable(fish) ~= 1 then
         error("MSYS2 env.exe and fish.exe are required below C:\\msys64\\usr\\bin")
     end
 
-    -- jobstart inherits Neovim's complete process environment. env.exe only
-    -- carries forward the already-authoritative MSYSTEM value; no HOME/XDG or
-    -- Windows profile variables are guessed or reconstructed here.
-    return { env, "MSYSTEM=" .. vim.env.MSYSTEM, fish, "--login", "-i" }
+    -- Fish chooses its startup configuration before conf.d/00-xdg.fish can
+    -- normalize inherited native paths. Match WezTerm's MSYS2 Fish launch
+    -- contract so config.fish, conf.d, and post.d are discoverable.
+    return {
+        env,
+        "MSYSTEM=" .. vim.env.MSYSTEM,
+        "HOME=" .. home,
+        "XDG_CONFIG_HOME=" .. home .. "/.config",
+        fish,
+        "--login",
+        "-i",
+    }
 end
 
 local function native_fish(path)
