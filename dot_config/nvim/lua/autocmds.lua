@@ -1,3 +1,19 @@
+-- ------------------------------------------------------------
+-- Filetype refinement
+-- ------------------------------------------------------------
+
+vim.filetype.add({
+    pattern = {
+        [".*/%.github/workflows/.*%.yml"] = "yaml.ghaction",
+        [".*/%.github/workflows/.*%.yaml"] = "yaml.ghaction",
+    },
+})
+
+
+-- ------------------------------------------------------------
+-- Create missing parent directories on save
+-- ------------------------------------------------------------
+
 vim.api.nvim_create_autocmd("BufWritePre", {
     callback = function(args)
         if args.match:match("^%w+://") then
@@ -9,6 +25,21 @@ vim.api.nvim_create_autocmd("BufWritePre", {
         if vim.fn.isdirectory(dir) == 0 then
             vim.fn.mkdir(dir, "p")
         end
+    end,
+})
+
+
+-- ------------------------------------------------------------
+-- Supplemental CLI lint
+-- ------------------------------------------------------------
+
+vim.api.nvim_create_autocmd("BufWritePost", {
+    callback = function(args)
+        if args.match:match("^%w+://") then
+            return
+        end
+
+        require("plugins.lint").try_lint()
     end,
 })
 
