@@ -166,8 +166,8 @@ function Get-RunnerStateRules {
         [ordered]@{
             root = 'local'
             statuses = @('new', 'modified', 'metadataOnly')
-            pathPattern = '^Packages/MicrosoftWindows\.Client\.CBS_cw5n1h2txyewy/TempState(?:/SearchUnifiedTileModelCache\.dat)?$'
-            description = 'Windows Search transient tile cache'
+            pathPattern = '^Packages/MicrosoftWindows\.Client\.CBS_cw5n1h2txyewy/(?:TempState(?:/SearchUnifiedTileModelCache\.dat)?|Settings(?:/settings\.dat\.LOG[12])?)$'
+            description = 'Windows shell package cache and settings journal'
         },
         [ordered]@{
             root = 'local'

@@ -118,6 +118,12 @@ try {
     Set-Content $searchCache 'before'
     Run-Case 'runner-search-cache' { Set-Content $searchCache 'after' } $false
     Run-Case 'runner-search-sibling' { Set-Content (Join-Path $searchState 'unknown.dat') 'x' } $true
+    $searchSettings = Join-Path $packages 'MicrosoftWindows.Client.CBS_cw5n1h2txyewy\Settings'
+    New-Item -ItemType Directory $searchSettings -Force | Out-Null
+    $searchSettingsLog = Join-Path $searchSettings 'settings.dat.LOG2'
+    Set-Content $searchSettingsLog 'before'
+    Run-Case 'runner-search-settings-log' { Set-Content $searchSettingsLog 'after' } $false
+    Run-Case 'runner-search-settings-sibling' { Set-Content (Join-Path $searchSettings 'unknown.LOG2') 'x' } $true
 } finally {
     if ($null -eq $savedGithubActions) { Remove-Item Env:GITHUB_ACTIONS -ErrorAction SilentlyContinue } else { $env:GITHUB_ACTIONS = $savedGithubActions }
     if ($null -eq $savedRunnerEnvironment) { Remove-Item Env:RUNNER_ENVIRONMENT -ErrorAction SilentlyContinue } else { $env:RUNNER_ENVIRONMENT = $savedRunnerEnvironment }
