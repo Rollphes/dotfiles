@@ -131,6 +131,53 @@ function Get-RunnerStateEntries([string] $CanonicalAppDataPath) {
     return @((Join-Path $CanonicalAppDataPath 'Roaming'))
 }
 
+function Get-RunnerStateRules {
+    if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted') {
+        return @()
+    }
+    # Windows-hosted run 34870817977 created or updated these OS/app-owned
+    # package-family and shell state paths while the first-apply audit ran.
+    # Keep each rule anchored to the local root and the exact Windows identity.
+    return @(
+        [ordered]@{
+            root = 'local'
+            statuses = @('new', 'modified', 'metadataOnly')
+            pathPattern = '^Packages/Microsoft\.SecHealthUI_8wekyb3d8bbwe(?:/(?:AC(?:/(?:INetCache|INetCookies|INetHistory|Temp))?|AppData|LocalCache|LocalState|RoamingState|Settings(?:/(?:roaming\.lock|settings\.dat))?|SystemAppData|TempState))?$'
+            description = 'Windows Security package-family state'
+        },
+        [ordered]@{
+            root = 'local'
+            statuses = @('new', 'modified', 'metadataOnly')
+            pathPattern = '^Packages/Microsoft\.VCLibs\.140\.00_8wekyb3d8bbwe(?:/AC(?:/(?:INetCache|INetCookies|INetHistory|Temp))?)?$'
+            description = 'Microsoft VCLibs package-family app-container state'
+        },
+        [ordered]@{
+            root = 'local'
+            statuses = @('new', 'modified', 'metadataOnly')
+            pathPattern = '^Microsoft/Windows/Notifications/wpndatabase\.db-wal$'
+            description = 'Windows notification database journal'
+        },
+        [ordered]@{
+            root = 'local'
+            statuses = @('new', 'modified', 'metadataOnly')
+            pathPattern = '^Packages/Microsoft\.Windows\.StartMenuExperienceHost_cw5n1h2txyewy/TempState(?:/StartUnifiedTileModelCache\.dat)?$'
+            description = 'Windows Start menu transient tile cache'
+        },
+        [ordered]@{
+            root = 'local'
+            statuses = @('new', 'modified', 'metadataOnly')
+            pathPattern = '^Packages/MicrosoftWindows\.Client\.CBS_cw5n1h2txyewy/TempState(?:/SearchUnifiedTileModelCache\.dat)?$'
+            description = 'Windows Search transient tile cache'
+        },
+        [ordered]@{
+            root = 'local'
+            statuses = @('metadataOnly')
+            pathPattern = '^Packages$'
+            description = 'Package-state container metadata'
+        }
+    )
+}
+
 function Write-JsonFile {
     param([Parameter(Mandatory)] $Value, [Parameter(Mandatory)][string] $Path)
     $Value | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $Path -Encoding utf8
@@ -394,6 +441,10 @@ function New-Report {
     foreach ($path in @($Metadata.runnerStateExclusions)) { $lines.Add("    $path") }
     $lines.Add('GITHUB-HOSTED RUNNER OS EXACT ENTRIES (classified after detection)')
     foreach ($path in @($Metadata.runnerStateEntries)) { $lines.Add("    $path") }
+    $lines.Add('GITHUB-HOSTED RUNNER OS STATE RULES (classified after detection)')
+    foreach ($rule in @($Metadata.runnerStateRules)) {
+        $lines.Add("    [$($rule.root)] $($rule.description): $($rule.pathPattern)")
+    }
     $lines.Add('EXPLICIT WORKSPACE EXCLUSIONS')
     $workspaceProperty = $Metadata.PSObject.Properties['workspaceRoots']
     if ($null -ne $workspaceProperty) {
@@ -437,9 +488,14 @@ function Write-PolicyResult {
                 $runnerEntry = @($Metadata.runnerStateEntries | Where-Object {
                     $absolutePath.Equals($_, [StringComparison]::OrdinalIgnoreCase)
                 }).Count -gt 0
+                $runnerRule = @($Metadata.runnerStateRules | Where-Object {
+                    $_.root -eq $id -and
+                    @($_.statuses) -contains $status -and
+                    $entry.path -match $_.pathPattern
+                }).Count -gt 0
                 if ($managedFont -or $fontContainer) {
                     $allowed.Add($record)
-                } elseif ($runnerEntry) {
+                } elseif ($runnerEntry -or $runnerRule) {
                     $runnerOsState.Add($record)
                 } else {
                     $record
@@ -486,7 +542,7 @@ if ($Command -eq 'start') {
 } else {
     $savedSession = Resolve-SessionDirectory $auditStateRoot -RequireActive
     $savedMetadata = Read-JsonFile (Join-Path $savedSession 'metadata.json')
-    if ($savedMetadata.schemaVersion -ne 5) { throw 'Obsolete audit schema; start a new audit session with the current script.' }
+    if ($savedMetadata.schemaVersion -ne 6) { throw 'Obsolete audit schema; start a new audit session with the current script.' }
     $hostProfilePath = Resolve-FullPath $savedMetadata.roots.hostProfile
     $HostTemp = $savedMetadata.roots.temp
     $hostLocalPath = $savedMetadata.roots.local
@@ -527,7 +583,7 @@ switch ($Command) {
         $metadata = [ordered]@{}
         try {
             $metadata = [ordered]@{
-                schemaVersion = 5
+                schemaVersion = 6
                 sessionId = $sessionId
                 status = 'starting'
                 startedAtUtc = [DateTime]::UtcNow.ToString('o')
@@ -557,6 +613,7 @@ switch ($Command) {
                 )
                 runnerStateExclusions = @(Get-RunnerStateExclusions $hostProfilePath $hostLocalPath $canonicalAppDataPath)
                 runnerStateEntries = @(Get-RunnerStateEntries $canonicalAppDataPath)
+                runnerStateRules = @(Get-RunnerStateRules)
                 policy = 'After exact bridge and OS exclusions, new, modified, metadataOnly host or canonical AppData entries fail except manifest-managed fonts and observed GitHub-hosted runner state; deleted entries are informational.'
                 exclusions = @('Any .ssh path component before filesystem access', 'Managed bridges and their container metadata', 'Canonical home except its forbidden AppData root', 'Audit state', 'Explicit command workspaces', 'Observed GitHub-hosted runner OS paths and exact entries')
                 environment = [ordered]@{

@@ -61,6 +61,10 @@ try {
     $env:GITHUB_ACTIONS = 'true'
     $env:RUNNER_ENVIRONMENT = 'self-hosted'
     Run-Case 'runner-exclusion-disabled' { New-Item -ItemType Directory $webCache -Force | Out-Null; Set-Content (Join-Path $webCache 'state-1') 'x' } $true
+    $notifications = Join-Path $hostRoot 'AppData\Local\Microsoft\Windows\Notifications'
+    New-Item -ItemType Directory $notifications -Force | Out-Null
+    $notificationJournal = Join-Path $notifications 'wpndatabase.db-wal'
+    Run-Case 'runner-state-rule-disabled' { Set-Content $notificationJournal 'self-hosted' } $true
 
     $env:RUNNER_ENVIRONMENT = 'github-hosted'
     Run-Case 'runner-webcache' { Set-Content (Join-Path $webCache 'state-2') 'x' } $false
@@ -88,6 +92,32 @@ try {
     Run-Case 'runner-canonical-roaming-entry' { New-Item -ItemType Directory $canonicalRoaming | Out-Null } $false
     Run-Case 'runner-canonical-roaming-child' { Set-Content (Join-Path $canonicalRoaming 'unknown.state') 'x' } $true
     Run-Case 'runner-exclusion-sibling' { Set-Content (Join-Path $hostRoot 'AppData\LocalLow\Microsoft\unknown.state') 'x' } $true
+    Run-Case 'runner-notification-journal' { Set-Content $notificationJournal 'github-hosted' } $false
+    Run-Case 'runner-notification-sibling' { Set-Content (Join-Path $notifications 'unknown.db-wal') 'x' } $true
+
+    $packages = Join-Path $hostRoot 'AppData\Local\Packages'
+    New-Item -ItemType Directory $packages -Force | Out-Null
+    $securitySettings = Join-Path $packages 'Microsoft.SecHealthUI_8wekyb3d8bbwe\Settings'
+    Run-Case 'runner-security-package-state' { New-Item -ItemType Directory $securitySettings -Force | Out-Null; Set-Content (Join-Path $securitySettings 'settings.dat') 'x' } $false
+    Run-Case 'runner-security-package-sibling' { Set-Content (Join-Path $securitySettings 'unknown.state') 'x' } $true
+    Run-Case 'runner-package-sibling' { New-Item -ItemType Directory (Join-Path $packages 'Contoso.Tool_1234567890abc\LocalState') -Force | Out-Null } $true
+    $vclibsCache = Join-Path $packages 'Microsoft.VCLibs.140.00_8wekyb3d8bbwe\AC\INetCache'
+    Run-Case 'runner-vclibs-package-state' { New-Item -ItemType Directory $vclibsCache -Force | Out-Null } $false
+    Run-Case 'runner-vclibs-sibling' { New-Item -ItemType Directory (Join-Path $packages 'Microsoft.VCLibs.140.00_8wekyb3d8bbwe\LocalState') -Force | Out-Null } $true
+
+    $startMenuState = Join-Path $packages 'Microsoft.Windows.StartMenuExperienceHost_cw5n1h2txyewy\TempState'
+    New-Item -ItemType Directory $startMenuState -Force | Out-Null
+    $startMenuCache = Join-Path $startMenuState 'StartUnifiedTileModelCache.dat'
+    Set-Content $startMenuCache 'before'
+    Run-Case 'runner-start-menu-cache' { Set-Content $startMenuCache 'after' } $false
+    Run-Case 'runner-start-menu-sibling' { Set-Content (Join-Path $startMenuState 'unknown.dat') 'x' } $true
+
+    $searchState = Join-Path $packages 'MicrosoftWindows.Client.CBS_cw5n1h2txyewy\TempState'
+    New-Item -ItemType Directory $searchState -Force | Out-Null
+    $searchCache = Join-Path $searchState 'SearchUnifiedTileModelCache.dat'
+    Set-Content $searchCache 'before'
+    Run-Case 'runner-search-cache' { Set-Content $searchCache 'after' } $false
+    Run-Case 'runner-search-sibling' { Set-Content (Join-Path $searchState 'unknown.dat') 'x' } $true
 } finally {
     if ($null -eq $savedGithubActions) { Remove-Item Env:GITHUB_ACTIONS -ErrorAction SilentlyContinue } else { $env:GITHUB_ACTIONS = $savedGithubActions }
     if ($null -eq $savedRunnerEnvironment) { Remove-Item Env:RUNNER_ENVIRONMENT -ErrorAction SilentlyContinue } else { $env:RUNNER_ENVIRONMENT = $savedRunnerEnvironment }
