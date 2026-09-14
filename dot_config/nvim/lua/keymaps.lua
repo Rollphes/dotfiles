@@ -11,3 +11,12 @@ vim.keymap.set("n", "<leader>m", function()
 end, {
     desc = "Toggle split/join",
 })
+
+vim.keymap.set({ "n", "v" }, "<leader>f", function()
+    require("conform").format({
+        async = true,
+        lsp_format = "fallback",
+    })
+end, {
+    desc = "Format buffer",
+})

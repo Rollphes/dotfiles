@@ -22,4 +22,5 @@ vim.pack.add({
     { src = "https://github.com/SmiteshP/nvim-navic" },
     { src = "https://github.com/MunifTanjim/nui.nvim" },
     { src = "https://github.com/hasansujon786/nvim-navbuddy" },
+    { src = "https://github.com/stevearc/conform.nvim" },
 })
