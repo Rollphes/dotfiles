@@ -20,3 +20,13 @@ vim.keymap.set({ "n", "v" }, "<leader>f", function()
 end, {
     desc = "Format buffer",
 })
+
+vim.keymap.set("n", "<leader>t", function()
+    require("terminal").toggle()
+end, {
+    desc = "Toggle integrated terminal",
+})
+
+vim.keymap.set("t", "<C-w>", "<C-\\><C-n><C-w>", {
+    desc = "Use window commands from terminal",
+})
