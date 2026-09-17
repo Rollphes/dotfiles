@@ -25,30 +25,25 @@ gitsigns.setup({
             gitsigns.nav_hunk("prev")
         end, "Previous Git hunk")
 
-        map("n", "<leader>ghs", gitsigns.stage_hunk, "Stage Git hunk")
+        map("n", "<leader>ga", gitsigns.stage_hunk, "Stage Git hunk")
 
-        map("v", "<leader>ghs", function()
+        map("v", "<leader>ga", function()
             gitsigns.stage_hunk({
                 vim.fn.line("."),
                 vim.fn.line("v"),
             })
         end, "Stage selected Git hunk")
 
-        map("n", "<leader>ghr", gitsigns.reset_hunk, "Reset Git hunk")
+        map("n", "<leader>gr", gitsigns.reset_hunk, "Reset Git hunk")
 
-        map("v", "<leader>ghr", function()
+        map("v", "<leader>gr", function()
             gitsigns.reset_hunk({
                 vim.fn.line("."),
                 vim.fn.line("v"),
             })
         end, "Reset selected Git hunk")
 
-        map(
-            "n",
-            "<leader>ghp",
-            gitsigns.preview_hunk,
-            "Preview Git hunk"
-        )
+        map("n", "<leader>gp", gitsigns.preview_hunk, "Preview Git hunk")
 
         map("n", "<leader>gb", function()
             gitsigns.blame_line({
