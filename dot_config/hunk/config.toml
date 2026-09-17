@@ -1,2 +1,6 @@
 agent_notes = true
 prompt_save_view_preferences = false
+
+[keybindings]
+"hunk.review.editSelectedFile" = false
+"nvim-editor.open" = "e"

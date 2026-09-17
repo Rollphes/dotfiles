@@ -3,6 +3,7 @@ require("keymaps")
 require("autocmds")
 require("packages")
 require("theme")
+require("editor_server").setup()
 
 require("plugins.auto_session")
 require("plugins.indent_blankline")
