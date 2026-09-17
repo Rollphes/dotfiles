@@ -1,6 +1,9 @@
 local bar = require("dropbar.bar")
+local configs = require("dropbar.configs")
 local sources = require("dropbar.sources")
 local utils = require("dropbar.utils")
+
+local default_enable = configs.opts.bar.enable
 
 local oil_source = {
     get_symbols = function(buf, _, _)
@@ -28,6 +31,21 @@ local oil_source = {
 
 require("dropbar").setup({
     bar = {
+        enable = function(buf, win, info)
+            buf = vim._resolve_bufnr(buf)
+
+            if
+                vim.api.nvim_buf_is_valid(buf)
+                and vim.api.nvim_win_is_valid(win)
+                and vim.bo[buf].filetype == "oil"
+            then
+                return vim.fn.win_gettype(win) == ""
+                    and vim.wo[win].winbar == ""
+            end
+
+            return default_enable(buf, win, info)
+        end,
+
         sources = function(buf, _)
             if vim.bo[buf].filetype == "oil" then
                 return {
