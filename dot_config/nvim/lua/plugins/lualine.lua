@@ -1,3 +1,6 @@
+vim.opt.showcmd = true
+vim.opt.showcmdloc = "statusline"
+
 require("lualine").setup({
     options = {
         theme = "auto",
@@ -9,7 +12,13 @@ require("lualine").setup({
         lualine_b = { "branch", "diff", "diagnostics" },
         lualine_c = {},
 
-        lualine_x = { "filetype" },
+        lualine_x = {
+            {
+                "%S",
+                padding = { left = 1, right = 1 },
+            },
+            "filetype",
+        },
         lualine_y = { "progress" },
         lualine_z = { "location" },
     },
