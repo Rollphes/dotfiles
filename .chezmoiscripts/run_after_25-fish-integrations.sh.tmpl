@@ -39,10 +39,8 @@ console_context "$cache_dir"
 
 mkdir -p "$cache_dir"
 
-{{ if ne .chezmoi.os "windows" -}}
 generate_init "$cache_dir/atuin.fish" \
     atuin init fish --disable-up-arrow --disable-ai
-{{ end -}}
 generate_init "$cache_dir/carapace.fish" carapace _carapace fish
 generate_init "$cache_dir/fzf.fish" fzf --fish
 generate_init "$cache_dir/starship.fish" starship init fish --print-full-init

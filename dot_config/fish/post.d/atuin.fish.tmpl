@@ -1,6 +1,3 @@
-{{ if eq .chezmoi.os "windows" -}}
-return
-{{ else -}}
 if not command -q atuin
     return
 end
@@ -15,4 +12,3 @@ else
     echo "fish: atuin init cache missing; generating for this session" >&2
     atuin init fish --disable-up-arrow --disable-ai | source
 end
-{{ end -}}
