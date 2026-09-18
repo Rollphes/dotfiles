@@ -1,24 +1,24 @@
 "$schema" = 'https://starship.rs/config-schema.json'
 
 format = """
-[ $os ](bg:#3a4a6a fg:#ffffff)\
+[ $os ](bg:#2a2a37 fg:#dcd7ba)\
 $username\
 $hostname\
 $container\
-[](bg:#3a3a3a fg:#3a4a6a)\
+[](bg:#363646 fg:#2a2a37)\
 $directory\
-[](fg:#3a3a3a bg:#addc10)\
+[](fg:#363646 bg:#2b3328)\
 $git_branch\
 $git_commit\
 $git_state\
 $git_status\
-[](fg:#addc10 bg:#2d3748)\
+[](fg:#2b3328 bg:#252535)\
 $nodejs\
 ${custom.typescript}\
 $rust\
 $golang\
 $php\
-[](fg:#2d3748)\
+[](fg:#252535)\
 \n$character"""
 
 right_format = "$cmd_duration"
@@ -35,8 +35,8 @@ Ubuntu = ""
 CentOS = ""
 
 [username]
-style_root = "bold fg:#ff8961 bg:#3a4a6a"
-style_user = "bold fg:#ffffff bg:#3a4a6a"
+style_root = "bold fg:#ff5d62 bg:#2a2a37"
+style_user = "bold fg:#dcd7ba bg:#2a2a37"
 show_always = true
 detect_env_vars = ['!TMUX', 'SSH_CONNECTION']
 format = '[$user ]($style)'
@@ -45,16 +45,16 @@ format = '[$user ]($style)'
 ssh_symbol = ""
 ssh_only = false
 detect_env_vars = ['!TMUX', 'SSH_CONNECTION']
-style = "fg:#ffffff bg:#3a4a6a"
+style = "fg:#dcd7ba bg:#2a2a37"
 format = '[via $ssh_symbol ($hostname) ]($style)'
 
 [container]
 symbol = ""
-style = "fg:#ffffff bg:#3a4a6a"
+style = "fg:#dcd7ba bg:#2a2a37"
 format = '[in $symbol ($name) ]($style)'
 
 [directory]
-style = "fg:#ffffff bg:#3a3a3a"
+style = "fg:#c8c093 bg:#363646"
 format = "[ $path ]($style)"
 truncation_length = 3
 truncation_symbol = "…/"
@@ -67,7 +67,7 @@ truncation_symbol = "…/"
 
 [git_branch]
 symbol = ""
-style = "fg:#1a3a01 bg:#addc10"
+style = "fg:#98bb6c bg:#2b3328"
 format = '[ $symbol $branch ]($style)'
 
 [git_commit]
@@ -75,11 +75,11 @@ only_detached = true
 commit_hash_length = 7
 tag_disabled = false
 tag_symbol = ""
-style = "fg:#1a3a01 bg:#addc10"
+style = "fg:#98bb6c bg:#2b3328"
 format = '[\($hash$tag\) ]($style)'
 
 [git_state]
-style = "fg:#5d2e0a bg:#addc10"
+style = "fg:#e6c384 bg:#2b3328"
 format = '[\($state( $progress_current/$progress_total)\) ]($style)'
 rebase = "REBASE"
 merge = "MERGE"
@@ -90,43 +90,42 @@ am = "AM"
 am_or_rebase = "AM/REBASE"
 
 [git_status]
-style = "fg:#1a3a01 bg:#addc10"
+style = "fg:#98bb6c bg:#2b3328"
 format = '[$all_status$ahead_behind ]($style)'
 
-conflicted = '[=](fg:#b71c1c bg:#addc10)'
-modified   = '[*](fg:#b71c1c bg:#addc10)'
-deleted    = '[✗](fg:#b71c1c bg:#addc10)'
-staged     = '[~](fg:#5d2e0a bg:#addc10)'
-untracked  = '[…](fg:#1a3a5e bg:#addc10)'
-stashed    = '[\$](fg:#5e548e bg:#addc10)'
-renamed    = '[»](fg:#1a3a5e bg:#addc10)'
-ahead      = '[+${count}](fg:#1a3a01 bg:#addc10)'
-behind     = '[-${count}](fg:#5d2e0a bg:#addc10)'
-diverged   = '[±+${ahead_count}-${behind_count}](fg:#b71c1c bg:#addc10)'
+conflicted = '[=](fg:#ff5d62 bg:#2b3328)'
+modified = '[*](fg:#e82424 bg:#2b3328)'
+deleted = '[✗](fg:#e82424 bg:#2b3328)'
+staged = '[~](fg:#e6c384 bg:#2b3328)'
+untracked = '[…](fg:#7fb4ca bg:#2b3328)'
+stashed = '[\$](fg:#957fb8 bg:#2b3328)'
+renamed = '[»](fg:#7fb4ca bg:#2b3328)'
+ahead = '[+${count}](fg:#98bb6c bg:#2b3328)'
+behind = '[-${count}](fg:#e6c384 bg:#2b3328)'
+diverged = '[±+${ahead_count}-${behind_count}](fg:#ff5d62 bg:#2b3328)'
 up_to_date = ''
 
 [nodejs]
 symbol = ""
-style = "bg:#2d3748"
-format = '[[ $symbol ($version) ](fg:#addc10 bg:#2d3748)]($style)'
+style = "bg:#252535"
+format = '[[ $symbol ($version) ](fg:#98bb6c bg:#252535)]($style)'
 
 [rust]
 symbol = ""
-style = "bg:#2d3748"
-format = '[[ $symbol ($version) ](fg:#addc10 bg:#2d3748)]($style)'
+style = "bg:#252535"
+format = '[[ $symbol ($version) ](fg:#ffa066 bg:#252535)]($style)'
 
 [golang]
 symbol = ""
-style = "bg:#2d3748"
-format = '[[ $symbol ($version) ](fg:#addc10 bg:#2d3748)]($style)'
+style = "bg:#252535"
+format = '[[ $symbol ($version) ](fg:#7fb4ca bg:#252535)]($style)'
 
 [php]
 symbol = ""
-style = "bg:#2d3748"
-format = '[[ $symbol ($version) ](fg:#addc10 bg:#2d3748)]($style)'
-
+style = "bg:#252535"
+format = '[[ $symbol ($version) ](fg:#957fb8 bg:#252535)]($style)'
 
 [cmd_duration]
 min_time = 100
 show_milliseconds = true
-format = "[ $duration](fg:#888888)"
+format = "[ $duration](fg:#727169)"
