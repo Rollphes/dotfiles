@@ -26,4 +26,5 @@ vim.pack.add({
     { src = "https://github.com/mfussenegger/nvim-lint" },
     { src = "https://github.com/lewis6991/gitsigns.nvim" },
     { src = "https://github.com/esmuellert/codediff.nvim" },
+    { src = "https://github.com/sphamba/smear-cursor.nvim" }
 })
