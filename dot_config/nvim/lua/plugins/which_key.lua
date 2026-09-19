@@ -1,7 +1,15 @@
-require("which-key").setup({
+local wk = require("which-key")
+
+wk.setup({
     preset = "modern",
 
     delay = 300,
+
+    triggers = {
+        { "<auto>", mode = "nxso" },
+        { "g",      mode = { "n", "v" } },
+        { "<C-w>",  mode = "n" },
+    },
 
     win = {
         no_overlap = false,
@@ -15,11 +23,11 @@ require("which-key").setup({
 
         height = {
             min = 4,
-            max = 16,
+            max = 25,
         },
 
         border = "rounded",
-        padding = { 0, 1 },
+        padding = { 1, 2 },
         title = false,
     },
 
@@ -28,7 +36,7 @@ require("which-key").setup({
             min = 20,
             max = 40,
         },
-        spacing = 2,
+        spacing = 3,
     },
 
     plugins = {
@@ -53,4 +61,8 @@ require("which-key").setup({
 
     show_help = false,
     show_keys = true,
+})
+
+wk.add({
+    { "gr", group = "LSP", mode = "n" },
 })
