@@ -23,11 +23,11 @@ vim.pack.add({
     { src = "https://github.com/b0o/schemastore.nvim" },
     { src = "https://github.com/SmiteshP/nvim-navic" },
     { src = "https://github.com/MunifTanjim/nui.nvim" },
-    { src = "https://github.com/hasansujon786/nvim-navbuddy" },
     { src = "https://github.com/stevearc/conform.nvim" },
     { src = "https://github.com/mfussenegger/nvim-lint" },
     { src = "https://github.com/lewis6991/gitsigns.nvim" },
     { src = "https://github.com/esmuellert/codediff.nvim" },
     { src = "https://github.com/sphamba/smear-cursor.nvim" },
-    { src = "https://github.com/folke/which-key.nvim" }
+    { src = "https://github.com/folke/which-key.nvim" },
+    { src = "https://github.com/folke/trouble.nvim" },
 })
