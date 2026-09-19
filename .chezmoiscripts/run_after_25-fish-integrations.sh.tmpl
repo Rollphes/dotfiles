@@ -11,17 +11,21 @@ cache_dir="$XDG_CACHE_HOME/fish/init"
 export PATH="$HOME/.local/bin:$XDG_DATA_HOME/mise/shims:$PATH"
 
 # @param $1 Output file.
-# @param $2... Generator command and arguments.
+# @param $2 Environment mode: msys or native.
+# @param $3... Generator command and arguments.
 generate_init() (
     output_file="$1"
-    shift
+    environment_mode="$2"
+    shift 2
 
     temp_file=$(mktemp "$cache_dir/.init.XXXXXX")
     trap 'rm -f "$temp_file"' EXIT INT TERM
 
     if ! (
 {{ if eq .chezmoi.os "windows" -}}
-        msys2_export_native_environment
+        if [ "$environment_mode" = "native" ]; then
+            msys2_export_native_environment
+        fi
 {{ end -}}
         "$@"
     ) >"$temp_file"; then
@@ -39,11 +43,15 @@ console_context "$cache_dir"
 
 mkdir -p "$cache_dir"
 
-generate_init "$cache_dir/atuin.fish" \
+generate_init "$cache_dir/atuin.fish" msys \
     atuin init fish --disable-up-arrow --disable-ai
-generate_init "$cache_dir/carapace.fish" carapace _carapace fish
-generate_init "$cache_dir/fzf.fish" fzf --fish
-generate_init "$cache_dir/starship.fish" starship init fish --print-full-init
-generate_init "$cache_dir/zoxide.fish" zoxide init fish
+generate_init "$cache_dir/carapace.fish" native \
+    carapace _carapace fish
+generate_init "$cache_dir/fzf.fish" native \
+    fzf --fish
+generate_init "$cache_dir/starship.fish" native \
+    starship init fish --print-full-init
+generate_init "$cache_dir/zoxide.fish" native \
+    zoxide init fish
 
 console_complete "$component" "Fish integrations generated"
