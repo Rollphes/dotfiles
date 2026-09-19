@@ -154,6 +154,27 @@ vim.lsp.config("biome", {
 
 
 -- ------------------------------------------------------------
+-- Tailwind CSS
+-- ------------------------------------------------------------
+
+-- Tailwind Language Server owns Tailwind semantic completion,
+-- hover information, diagnostics and color information.
+-- blink.cmp only renders the completion items exposed through LSP.
+vim.lsp.config("tailwindcss", {
+    settings = {
+        tailwindCSS = {
+            classFunctions = {
+                "clsx",
+                "cn",
+                "cva",
+                "tw",
+            },
+        },
+    },
+})
+
+
+-- ------------------------------------------------------------
 -- Python
 -- ------------------------------------------------------------
 
@@ -212,6 +233,9 @@ vim.lsp.enable({
     "eslint",
     "oxlint",
     "biome",
+
+    -- Tailwind CSS
+    "tailwindcss",
 
     -- Rust
     "rust_analyzer",

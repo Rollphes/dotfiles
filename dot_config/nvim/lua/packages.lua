@@ -7,6 +7,8 @@ vim.pack.add({
     { src = "https://github.com/rmagatti/auto-session" },
     { src = "https://github.com/Saghen/blink.cmp" },
     { src = "https://github.com/saghen/blink.lib" },
+    { src = "https://github.com/zbirenbaum/copilot.lua" },
+    { src = "https://github.com/giuxtaposition/blink-cmp-copilot" },
     { src = "https://github.com/stevearc/oil.nvim" },
     { src = "https://github.com/machakann/vim-sandwich" },
     { src = "https://github.com/Bekaboo/dropbar.nvim" },
